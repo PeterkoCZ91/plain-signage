@@ -1,0 +1,41 @@
+# local environment: real hosts, tokens, passwords
+*.local.md
+*.local.json
+.env
+.env.*
+!.env.example
+
+# build output and dependencies
+node_modules/
+dist/
+build/
+*.wgt
+*.zip
+*.img
+*.img.gz
+
+# firmware (large files)
+*.bin
+*.exe
+
+# OS
+.DS_Store
+
+# Python artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# local server state and telemetry
+tv-state.json
+telemetry.jsonl
+
+# Android: build output and signing keys stay local
+kiosk-app/build/
+wifi-app/build/
+*.keystore
+*.keystore.pass
+
+# local previews
+previews/

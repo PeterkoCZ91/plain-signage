@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Signage kiosk — a minimal launcher with a WebView.
+
+  The key thing is the HOME category: the system starts the HOME app itself as
+  part of boot, so the Android 10 restriction on starting activities from the
+  background does not apply to it. That is why the screen starts without a human
+  after a power outage, which a BOOT_COMPLETED receiver cannot do reliably on
+  Android 10 — and that is why there is no such receiver here, so it does not
+  give the false impression that autostart works without setting the launcher.
+
+  exported=true stays: a LAUNCHER/HOME start and `am start -d` both require it.
+  Therefore MainActivity accepts an address from the intent only for https and
+  the host of BASE_URL. Cleartext is disabled: BASE_URL and all documented
+  addresses are https.
+
+  There is deliberately NO intent filter for VIEW/https — the app should not
+  become a candidate for opening links. The address can be overridden with an
+  explicit start:
+  am start -n app.plainsignage.kiosk/.MainActivity -d "https://.../tv/<screen>"
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="app.plainsignage.kiosk"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+  <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="29" />
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <!-- box health: Wi-Fi signal strength (getRssi) for the admin; the SSID is not read -->
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <!-- optional: with SYSTEM_ALERT_WINDOW granted the watchdog may bring the kiosk back from the background (Android 10) -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <!-- controlled update from the server (Updater); allow once via ADB:
+       appops set app.plainsignage.kiosk REQUEST_INSTALL_PACKAGES allow -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+  <!-- so it can be installed on a TV and on a box without a touchscreen -->
+  <uses-feature android:name="android.software.leanback" android:required="false" />
+  <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+  <application
+      android:label="Signage Kiosk"
+      android:icon="@mipmap/ic_launcher"
+      android:banner="@drawable/banner"
+      android:hardwareAccelerated="true"
+      android:usesCleartextTraffic="false"
+      android:allowBackup="false">
+    <activity
+        android:name=".MainActivity"
+        android:exported="true"
+        android:launchMode="singleTask"
+        android:screenOrientation="landscape"
+        android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode|fontScale|density"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+      <!-- HOME = autostart after power-on and after a power outage -->
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.HOME" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+      <!-- a launcher entry on the TV so the kiosk can be started without a computer -->
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+        <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+      </intent-filter>
+    </activity>
+    <!-- start the kiosk again right after an update -->
+    <receiver android:name=".UpdateReceiver" android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

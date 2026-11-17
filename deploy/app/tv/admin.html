@@ -1,0 +1,2128 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<!-- "Add to home screen": nice icon + launch as an app (fullscreen, no browser bar) -->
+<link rel="manifest" href="/assets/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Signage">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#08080a">
+<title data-i18n="admin.title">Správa obrazovky</title>
+<style>
+  :root{
+    --bg:#0e0f13; --card:#15181e; --line:#262b34; --txt:#eef0f4; --dim:#98a0ad;
+    --acc:#5b8cff; --acc-bg:#16203a; --acc-line:#2c447d;
+    --ok:#3ddc84; --bad:#ff5f56; --warn:#ffb454; --r:12px; --field:#0b0d11; --btn:#1e232c;
+  }
+  /* own inline icons (sprite at the top of body); colour = currentColor */
+  .i{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px;margin-right:6px}
+  .i.only{margin-right:0}
+  .drop .big .i,.empty .big .i{margin:0}
+  .drop .big .i{width:24px;height:24px}
+  .empty .big .i{width:34px;height:34px;stroke-width:1.4}
+  .up-ico .i{width:18px;height:18px;margin:0;vertical-align:middle}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--txt);
+    font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:48px}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  /* header: title, screen picker, status (online + in memory) in one row, language, version */
+  header{position:static;z-index:5;background:rgba(14,15,19,.97);
+    border-bottom:1px solid var(--line);padding:10px 18px;display:flex;
+    align-items:center;gap:8px 14px;flex-wrap:wrap}
+  header h1{font-size:16px;font-weight:650}
+  .status{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;flex:1;min-width:0;
+    font-size:13px;color:var(--dim)}
+  .status .hint{color:var(--dim)}
+  .availability-state{font-weight:700}
+  .availability-state.online{color:var(--ok)}.availability-state.offline{color:#aab0bc}
+  .status .mem:empty{display:none}
+  .status .mem.warn{color:var(--warn)}
+  main{max-width:1240px;margin:0 auto;padding:14px 18px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    padding:14px;margin-bottom:14px}
+  .url{display:flex;align-items:center;gap:10px;background:var(--field);
+    border:1px solid var(--line);border-radius:10px;padding:10px 12px;flex-wrap:wrap}
+  .url code{font:600 15px/1.3 ui-monospace,monospace;color:var(--acc);word-break:break-all}
+  .url .hint{color:var(--dim);font-size:13px;width:100%}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--acc);color:#0b1020;border:0;border-radius:10px;
+    padding:10px 16px;font-size:14px;font-weight:650;cursor:pointer;min-height:44px}
+  .btn:active{transform:translateY(1px)}
+  .btn.ghost{background:var(--btn);color:var(--txt);border:1px solid var(--line)}
+
+  /* add content: compact, one zone + a row with the limits */
+  .addcard{display:flex;gap:14px 20px;align-items:stretch;flex-wrap:wrap;padding:12px}
+  .drop{flex:1 1 320px;border:2px dashed var(--line);border-radius:10px;padding:12px 16px;
+    color:var(--dim);transition:.15s;cursor:pointer;min-height:76px;
+    display:flex;flex-direction:row;align-items:center;justify-content:center;gap:12px;text-align:left}
+  .drop .big{font-size:24px;line-height:1;color:var(--acc)}
+  .drop .txt{display:flex;flex-direction:column}
+  .drop strong{color:var(--txt);font-weight:650}
+  .drop.hover{border-color:var(--acc);color:var(--txt);background:#12151b}
+  .addmeta{flex:1 1 280px;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:6px}
+  .specs{display:flex;flex-wrap:wrap;gap:5px}
+  .pill{background:var(--field);border:1px solid var(--line);border-radius:999px;
+    padding:3px 10px;font-size:12px;color:var(--dim);white-space:nowrap}
+  .pill.warn{border-color:var(--warn);color:var(--warn)}
+  .pill.bad{border-color:var(--bad);color:var(--bad)}
+  .limits{font-size:12px;color:var(--dim)}
+  .limits b{color:var(--txt);font-weight:650}
+  .meter{height:5px;background:#232833;border-radius:6px;overflow:hidden}
+  .meter>i{display:block;height:100%;width:0;background:var(--acc);transition:width .3s;border-radius:6px}
+  .meter.warn>i{background:var(--warn)} .meter.full>i{background:var(--bad)}
+  .storage{font-size:12px;color:var(--dim)}
+  .storage b{color:var(--txt);font-weight:650}
+  .uplist{flex:1 1 100%;display:flex;flex-direction:column;gap:8px}
+  .uplist:empty{display:none}
+
+  /* upload progress per file */
+  .up{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+  .up-head{display:flex;align-items:center;gap:10px;font-size:13px}
+  .up-ico{font-size:15px;width:18px;text-align:center}
+  .up-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
+  .up-state{font-size:12px;color:var(--dim);white-space:nowrap}
+  .up-state.ok{color:var(--ok)} .up-state.bad{color:var(--bad)}
+  .up-state.warn{color:var(--warn)} .up-state.info{color:var(--acc)}
+  .bar{height:5px;background:#232833;border-radius:6px;overflow:hidden;margin-top:8px}
+  .bar>i{display:block;height:100%;width:0;background:var(--acc);transition:width .15s;border-radius:6px}
+  .up.done .bar>i{background:var(--ok)} .up.done .bar{background:#1c2b22}
+  .up.err .bar>i{background:var(--bad);width:100%!important}
+  .up.warn .bar>i{background:var(--warn)} .up.warn .bar{background:#2b2419}
+  .up-why{font-size:12px;color:var(--bad);margin-top:6px;display:none;line-height:1.35}
+  .up.err .up-why{display:block}
+  .up.warn .up-why{display:block;color:var(--warn)}
+  /* the server fixed the file itself - neither an error nor a warning */
+  .up.info .bar>i{background:var(--acc)} .up.info .bar{background:#1b2333}
+  .up.info .up-why{display:block;color:var(--acc)}
+
+  /* the "What is playing" list = main content, without a card frame */
+  .playing{margin:0 0 14px}
+  .playing h2{font-size:15px;font-weight:650;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .playing h2 .order{color:var(--dim);font-weight:400;font-size:13px}
+  .playing h2 .grow{flex:1}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:10px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
+    display:flex;flex-direction:column;transition:border-color .5s,box-shadow .5s,opacity .2s}
+  .tile.flash{border-color:var(--acc);box-shadow:0 0 0 2px rgba(91,140,255,.3)}
+  .tile.removing{opacity:0;transform:scale(.97)}
+  .thumbwrap{position:relative}
+  .tile .thumb{width:100%;aspect-ratio:16/9;object-fit:cover;background:#000;display:block}
+  .badge{position:absolute;left:6px;top:6px;background:rgba(0,0,0,.66);color:#fff;
+    font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;display:flex;align-items:center;gap:4px}
+  .idx{position:absolute;right:6px;top:6px;background:rgba(0,0,0,.66);color:#fff;
+    font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px}
+  .tile .meta{padding:8px;display:flex;flex-direction:column;gap:6px}
+  .tile .name{font-size:12px;color:var(--dim);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .tile .row{display:flex;gap:5px;align-items:center}
+  .tile input[type=number]{width:56px;background:var(--field);border:1px solid var(--line);
+    color:var(--txt);border-radius:8px;padding:6px;font-size:14px;min-height:44px;text-align:center}
+  .tile .unit{font-size:12px;color:var(--dim);flex:1}
+  .tile .acts{display:flex;gap:6px;align-items:stretch}
+  .tile .acts .vis{flex:1 1 auto;min-width:0}
+  .tile .acts .del{flex:0 0 auto}
+  .tile.off .thumb{filter:grayscale(1) opacity(.4)}
+  .tile.off{border-style:dashed}
+  .tile .vis,.tile .snd{background:var(--btn);color:var(--dim);border:1px solid var(--line);border-radius:8px;
+    padding:8px 8px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px}
+  .tile .snd{width:100%}
+  .tile .vis.on,.tile .snd.on{background:var(--acc-bg);color:#a9c4ff;border-color:var(--acc-line)}
+  .tile .vis:active,.tile .snd:active{transform:translateY(1px)}
+  .tile .del{background:transparent;color:#ff8a80;border:1px solid #4a2a30;border-radius:8px;padding:8px 12px;
+    font-size:13px;font-weight:600;cursor:pointer;min-height:44px}
+  .tile .del:active{transform:translateY(1px)}
+  .tile .mv{background:var(--btn);color:var(--txt);border:0;border-radius:8px;padding:6px;
+    font-size:16px;cursor:pointer;min-height:44px;min-width:40px}
+  .tile .mv[disabled]{opacity:.32;cursor:default}
+  .tile .mv:not([disabled]):active{transform:translateY(1px)}
+
+  /* scheduling: one collapsible row, badges visible even when closed */
+  .tile details.plan{border-top:1px solid var(--line);margin:2px -8px 0;padding:0 8px}
+  .tile details.plan>summary{display:flex;align-items:center;gap:6px;flex-wrap:wrap;list-style:none;
+    cursor:pointer;min-height:36px;padding:4px 0;font-size:12px;color:var(--dim)}
+  .tile details.plan>summary::-webkit-details-marker{display:none}
+  .tile details.plan>summary::before{content:"▸";color:var(--dim);font-size:11px;width:10px}
+  .tile details.plan[open]>summary::before{content:"▾"}
+  .tile .plansum-t{font-weight:600}
+  .tile .planbadge,.tile .validbadge{font-size:11px;color:#a9c4ff;background:var(--acc-bg);border:1px solid var(--acc-line);
+    border-radius:999px;padding:1px 8px;overflow-wrap:anywhere}
+  .tile .plancont{display:flex;flex-direction:column;gap:8px;padding:2px 0 8px}
+  .tile .sched{display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap}
+  .tile .sched label{font-size:11px;color:var(--dim);display:flex;flex-direction:column;gap:2px;flex:1 1 90px}
+  .tile .sched input{background:var(--field);border:1px solid var(--line);color:var(--txt);width:100%;
+    border-radius:7px;padding:6px;font-size:13px;min-height:44px;color-scheme:dark}
+  .tile .sched .plan-btn{background:var(--btn);color:var(--txt);border:1px solid var(--line);border-radius:8px;
+    padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px;flex:1 1 100%}
+  .tile .sched .plan-btn.on,.tile .sched .plan-btn[aria-expanded=true]{border-color:var(--acc-line);color:#a9c4ff}
+  .tile .planpanel{display:flex;flex-direction:column;gap:8px;padding:9px;background:var(--field);border:1px solid var(--line);border-radius:9px}
+  .tile .plandays{display:flex;flex-wrap:wrap;gap:5px}
+  .tile .planday{flex:1 1 40px;min-width:40px;min-height:44px;background:var(--btn);color:var(--dim);border:1px solid var(--line);
+    border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+  .tile .planday[aria-pressed=true]{background:var(--acc-bg);color:#a9c4ff;border-color:var(--acc-line)}
+  .tile .plantimes{display:flex;gap:8px;flex-wrap:wrap}
+  .tile .plantimes label{font-size:11px;color:var(--dim);display:flex;flex-direction:column;gap:3px;flex:1 1 90px}
+  .tile .plantimes input{background:var(--field);border:1px solid var(--line);color:var(--txt);border-radius:7px;
+    padding:6px;font-size:13px;min-height:44px;color-scheme:dark;width:100%}
+  .tile .planhint{font-size:11px;color:var(--dim);line-height:1.4}
+  .tile .planerr{font-size:12px;color:#ff8a80}
+  .tile .planbtns{display:flex;gap:7px;flex-wrap:wrap}
+  .tile .planbtns button{flex:1 1 90px;min-height:44px;border-radius:8px;border:1px solid var(--line);
+    background:var(--btn);color:var(--txt);font-size:13px;font-weight:600;cursor:pointer}
+  .tile .planbtns .plan-save{background:var(--acc-bg);color:#a9c4ff;border-color:var(--acc-line)}
+
+  /* collapsible sections under the list */
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px}
+  .sec>summary{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;list-style:none;cursor:pointer;
+    min-height:48px;padding:10px 14px}
+  .sec>summary::-webkit-details-marker{display:none}
+  .sec>summary::before{content:"▸";color:var(--dim);width:12px;font-size:12px}
+  .sec[open]>summary::before{content:"▾"}
+  .sec>summary .st{font-size:14px;font-weight:650}
+  .sec>summary .ss{font-size:13px;color:var(--dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sec>.body{padding:2px 14px 14px;border-top:1px solid var(--line);padding-top:14px}
+  .sec .body>.pair-first{margin-top:0}
+
+  .setrow{display:flex;align-items:flex-start;gap:12px;cursor:pointer;font-size:14px;color:var(--txt)}
+  .setrow input{width:22px;height:22px;margin-top:1px;accent-color:var(--acc);flex:none}
+  .qrset{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+  .transset{margin-top:14px}
+  .transset label{display:block;font-size:13px;color:var(--dim);margin-bottom:6px}
+  .transset select{width:100%;max-width:420px;background:var(--field);border:1px solid var(--line);
+    color:var(--txt);border-radius:9px;padding:10px 12px;font-size:14px;min-height:46px}
+  .transset .hint{margin-top:6px;font-size:13px;color:var(--dim)}
+  .qrset>label{display:block;font-size:13px;color:var(--dim);margin-bottom:8px}
+  .qrrow{display:flex;gap:10px;align-items:center}
+  .qrrow input[type=text]{flex:1;background:var(--field);border:1px solid var(--line);color:var(--txt);
+    border-radius:9px;padding:10px 12px;font-size:14px;min-height:46px;min-width:0}
+  .qron{display:flex;align-items:center;gap:8px;flex:none;width:64px;min-height:44px;cursor:pointer;
+    font-size:13px;font-weight:600;color:var(--txt)}
+  .qron input{width:24px;height:24px;margin:0;accent-color:var(--acc);flex:none;cursor:pointer}
+  .qrset .qrrow+.qrrow, .qrset .qrpicks+.qrrow{margin-top:10px}
+  .qrset .hint{margin-top:10px;font-size:13px;color:var(--dim)}
+  .qrpicks{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding-left:74px}
+  .chip{background:var(--btn);color:var(--txt);border:1px solid var(--line);border-radius:999px;
+    padding:9px 13px;font-size:13px;cursor:pointer;min-height:44px}
+  .chip:active{transform:translateY(1px)}
+  #qrPreview{display:none;margin-top:12px;width:120px;height:120px;border-radius:10px;
+    background:#f5f0e4;padding:6px}
+  .brandhead{margin-top:0;padding-top:0;border-top:0}
+  .fieldrow{display:flex;gap:10px;align-items:center}
+  .screenlabel{width:100%;max-width:320px;background:var(--field);border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:9px 10px;margin:6px 8px 6px 0;font:inherit}
+  .availability-bars{display:flex;gap:3px;margin:12px 0 8px;min-height:20px}
+  .availability-bar{flex:1;min-width:3px;border-radius:3px;background:#2b303a}.availability-bar.seen{background:var(--ok)}
+  .availability-bar.gap{background:#d59a4a}.availability-note{font-size:12px;color:var(--dim);line-height:1.45}
+  .khealth{font-size:12px;color:var(--dim);line-height:1.45;margin:0 0 6px}
+  .khealth:empty{display:none} .khealth .warn{color:var(--warn)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 4px}
+
+  .empty{text-align:center;color:var(--dim);padding:28px 12px;display:flex;
+    flex-direction:column;align-items:center;gap:8px;border:1px dashed var(--line);border-radius:var(--r)}
+  .empty .big{font-size:34px;line-height:1}
+  .empty .sub{font-size:13px;color:var(--dim)}
+  .msg{margin-top:10px;font-size:13px;color:var(--dim);min-height:0}
+  .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
+
+  /* toast - visual confirmation of actions */
+  .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);
+    background:#1b2230;border:1px solid var(--line);color:var(--txt);padding:12px 18px;
+    border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 10px 34px rgba(0,0,0,.55);
+    opacity:0;pointer-events:none;visibility:hidden;transition:.25s;z-index:20;display:flex;align-items:center;
+    gap:9px;max-width:92vw}
+  .toast.show{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+  .toast.act{pointer-events:auto}
+  .toast-act{background:var(--btn);color:var(--acc);border:1px solid var(--line);border-radius:8px;
+    padding:8px 14px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px}
+  .toast.ok{border-color:var(--ok)} .toast.bad{border-color:var(--bad)}
+
+  .devicepicker{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .devicepicker select{max-width:360px;text-overflow:ellipsis;background:var(--field);border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:8px 10px;font-size:13px;min-height:44px}
+  .devicepicker .new{background:var(--btn);color:var(--txt);border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-size:13px;font-weight:650;cursor:pointer;min-height:44px}
+  .pair{display:none;background:#17241f;border:1px solid #2f7f55;border-radius:12px;padding:14px;margin-bottom:14px;align-items:center;gap:12px;flex-wrap:wrap}
+  .pair.on{display:flex}.pair b{color:#74e3a1}.pair code{font:700 18px ui-monospace,monospace;color:#f5f0e4;letter-spacing:.08em}
+  @media (max-width:520px){
+    .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    main{padding:10px 12px}
+    .tile .meta{padding:6px}
+    .tile details.plan{margin:2px -6px 0;padding:0 6px}
+    .tile .mv{min-width:38px;padding:4px}
+    .tile input[type=number]{width:52px}
+    .tile .vis,.tile .snd{font-size:12px;padding:6px 4px}
+    .tile .del{padding:6px 9px;font-size:12px}
+    /* compact header: title + language + version / screen picker / status */
+    header{padding:8px 12px;gap:6px 8px}
+    header h1{font-size:15px;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .devicepicker{flex:1 1 100%;order:3;flex-wrap:nowrap;min-width:0}
+    .devicepicker select{flex:1 1 auto;min-width:0;max-width:none}
+    .status{flex:1 1 100%;order:4}
+    header #ver{order:2}
+    .playing h2 .order{display:none}
+    .qrrow{flex-wrap:wrap}
+    .qrrow input[type=text]{flex:1 1 140px}
+    .drop{min-height:64px;padding:8px 12px}
+    .addcard{padding:10px;gap:10px}
+    .specs{display:none}
+    .sec>summary .ss{flex:1 1 100%;white-space:normal}
+  }
+  @media (min-width:521px){ header{position:sticky;top:0} }
+  .lang{display:flex;gap:4px}
+  .lang button{background:var(--btn);color:var(--dim);border:1px solid var(--line);border-radius:8px;
+    padding:8px 12px;font-size:13px;font-weight:650;cursor:pointer;min-height:44px;min-width:44px}
+  .lang button.on{background:var(--acc);color:#0b1020;border-color:var(--acc)}
+  :focus-visible{outline:3px solid #8fb8ff;outline-offset:2px}
+  .drop:focus-visible{border-color:var(--acc);color:var(--txt);background:#12151b}
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M3 17l5-5 4 4 3-3 6 6"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 3l4 4 4-4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></symbol>
+    <symbol id="i-arrowup" viewBox="0 0 24 24"><path d="M12 20V5M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></symbol>
+    <symbol id="i-storage" viewBox="0 0 24 24"><path d="M3 14h18v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM3 14l3-8h12l3 8M7 17h.01"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM17 9l5 6M22 9l-5 6"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2zM12 10v5M12 18h.01"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+    <symbol id="i-decline" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
+    <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3v3l4 6-4 6v3M16 3v3l-4 6 4 6v3"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  </defs>
+</svg>
+<header>
+  <h1 data-i18n="admin.title">Správa obrazovky</h1>
+  <div class="devicepicker">
+    <select id="deviceSelect" aria-label="Vybrat obrazovku" data-i18n-attr="aria-label:admin.device.select"></select>
+    <button class="new" id="newDevice" type="button" data-i18n="admin.device.new">+ Nová obrazovka</button>
+  </div>
+  <div class="status" id="statusLine" aria-live="polite">
+    <span class="availability-state" id="availabilityState" data-i18n="admin.avail.loading">Zjišťuji…</span>
+    <span class="hint" id="availabilityWhen"></span>
+    <span class="mem" id="memState"></span>
+  </div>
+  <div class="lang" role="group" aria-label="Jazyk" data-i18n-attr="aria-label:admin.lang.label"><button type="button" data-lang="cs">CS</button><button type="button" data-lang="en">EN</button></div>
+  <span style="color:var(--dim);font-size:12px;font-family:ui-monospace,monospace" id="ver" title="Verze aplikace" data-i18n-attr="title:admin.ver.title">v…</span>
+</header>
+
+<main>
+  <div class="pair" id="pairBox">
+    <span><svg class="i" aria-hidden="true"><use href="#i-tv"/></svg><span data-i18n="admin.pair.prefix">Připojit novou TV s kódem</span> <code id="pairCode">…</code> <span data-i18n="admin.pair.middle">k obrazovce</span> <b id="pairDevice">…</b></span>
+    <button class="btn" id="pairClaim" type="button" data-i18n="admin.pair.claim">Připojit TV</button>
+  </div>
+
+  <div class="card addcard">
+    <h2 class="sr" data-i18n="admin.add.title">Přidat obsah</h2>
+    <div class="drop" id="drop" role="button" tabindex="0">
+      <span class="big"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg></span>
+      <span class="txt">
+        <strong data-i18n="admin.drop.main">Přetáhni sem fotky nebo videa</strong>
+        <span data-i18n="admin.drop.sub">nebo klepni a vyber ze zařízení</span>
+      </span>
+      <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" multiple hidden>
+    </div>
+    <div class="addmeta">
+      <div class="specs" id="specs"></div>
+      <div class="limits" id="limits"></div>
+      <div class="meter" id="meter"><i id="meterFill"></i></div>
+      <div class="storage" id="storageTxt" data-i18n="admin.storage.loading">Zjišťuji volné místo…</div>
+    </div>
+    <div class="uplist" id="uplist" aria-live="polite"></div>
+  </div>
+
+  <section class="playing">
+    <h2><span data-i18n="admin.playing.title">Co se přehrává</span>
+      <span class="order" data-i18n="admin.playing.order">(pořadí shora dolů)</span>
+      <span class="grow"></span>
+      <span class="pill" id="cntPill" data-i18n="admin.count.zero">0 položek</span>
+      <span class="pill" id="usedPill">…</span>
+    </h2>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" style="display:none">
+      <span class="big"><svg class="i" aria-hidden="true"><use href="#i-photo"/></svg></span>
+      <span><strong data-i18n="admin.empty.title">Zatím tu nic není</strong></span>
+      <span class="sub" data-i18n="admin.empty.sub">Přetáhni nahoru první fotku nebo video – hned se objeví na obrazovce.</span>
+    </div>
+    <div class="empty" id="loadErr" style="display:none">
+      <span class="big"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg></span>
+      <span><strong data-i18n="admin.load.failed">Seznam se nepodařilo načíst</strong></span>
+      <span class="sub" data-i18n="admin.load.failedSub">Server neodpovídá nebo vrátil chybu. Tvoje položky tím nezmizely.</span>
+      <button class="btn ghost" id="loadRetry" type="button" data-i18n="admin.load.retry">Zkusit znovu</button>
+    </div>
+    <div class="msg" id="msgList" role="alert"></div>
+  </section>
+
+  <details class="sec" id="secAddr" data-sec="addr">
+    <summary><span class="st" data-i18n="admin.addr.title">Adresa a QR obrazovky</span><span class="ss" id="sumAddr"></span></summary>
+    <div class="body">
+      <div class="transset brandhead" style="margin-bottom:12px">
+        <label for="screenLabel" data-i18n="admin.label.label">Popisek obrazovky</label>
+        <input type="text" id="screenLabel" class="screenlabel" maxlength="60" placeholder="např. Recepce" data-i18n-attr="placeholder:admin.label.placeholder" autocomplete="off">
+        <button class="btn ghost" id="saveLabel" type="button" data-i18n="admin.label.save">Uložit popisek</button>
+        <div class="hint"><span data-i18n="admin.name.prefix">Jméno v adrese:</span> <code id="screenName">…</code> <span data-i18n="admin.name.suffix">— nové obrazovky ho mají náhodné, aby se adresa (a s ní nahraná média) nedala uhodnout. Adresu nikomu neposílej.</span></div>
+      </div>
+      <div class="url">
+        <code id="tvurl">…</code>
+        <button class="btn ghost" id="copy" data-copy="tv" data-i18n="admin.copy">Kopírovat</button>
+        <div class="hint" data-i18n="admin.addr.modern">Moderní chytrá TV / tablet — otevři v prohlížeči tuto adresu.</div>
+      </div>
+      <div class="url" style="margin-top:10px">
+        <code id="tvurlHttp">…</code>
+        <button class="btn ghost" id="copyHttp" data-copy="http" data-i18n="admin.copy">Kopírovat</button>
+        <div class="hint" data-i18n="admin.addr.legacy">Starší Samsung panel (neumí https) — použij tuto adresu v Spouštěči URL.</div>
+      </div>
+      <div style="margin-top:12px">
+        <img id="screenQr" alt="QR kód s adresou přehrávače této obrazovky" data-i18n-attr="alt:admin.qr.alt" width="160" height="160"
+             style="background:#f5f0e4;border-radius:8px;display:block">
+        <div class="hint" style="margin-top:6px;color:var(--dim);font-size:13px" data-i18n="admin.qr.hint">QR s adresou přehrávače (https).</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="secPlay" data-sec="play">
+    <summary><span class="st" data-i18n="admin.settings.title">Nastavení přehrávání</span><span class="ss" id="sumPlay"></span></summary>
+    <div class="body">
+      <label class="setrow">
+        <input type="checkbox" id="qrCorner">
+        <span><b data-i18n="admin.qrcorner.title">QR kód v rohu</b> <span data-i18n="admin.qrcorner.desc">— malý QR přes běžící obsah (volitelné)</span></span>
+      </label>
+      <div class="transset">
+        <label for="transition" data-i18n="admin.transition.label">Přechod mezi fotkami</label>
+        <select id="transition">
+          <option value="fade" data-i18n="admin.transition.fade">Jemné prolnutí</option>
+          <option value="cut" data-i18n="admin.transition.cut">Okamžitý střih</option>
+        </select>
+        <div class="hint" data-i18n="admin.transition.hint">Videa se kvůli spolehlivosti vždy přepínají střihem.</div>
+      </div>
+      <div class="transset">
+        <label for="fitMode" data-i18n="admin.fit.label">Orientace a zaplnění obrazovky</label>
+        <select id="fitMode">
+          <option value="landscape" data-i18n="admin.fit.landscape">Na šířku — celý obraz, černé pruhy po stranách</option>
+          <option value="portrait" data-i18n="admin.fit.portrait">Na výšku — pro otočenou obrazovku</option>
+          <option value="portrait270" data-i18n="admin.fit.portrait270">Na výšku, otočeno na druhou stranu</option>
+          <option value="fill" data-i18n="admin.fit.fill">Výplň — bez pruhů, okraje se oříznou</option>
+        </select>
+        <div class="hint" data-i18n="admin.fit.hint">„Na výšku“ otočí obraz o 90°; vyber ji jen když je obrazovka fyzicky otočená, jinak bude obsah ležet na boku.</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="secBrand" data-sec="brand">
+    <summary><span class="st" data-i18n="admin.brand.title">Vzhled a kontakty</span><span class="ss" id="sumBrand"></span></summary>
+    <div class="body">
+      <div class="qrset brandhead" id="brandSet">
+        <label for="brName" data-i18n="admin.brand.label">Vzhled a kontakty (kontakt v patičce, výchozí QR cíle, název aplikace):</label>
+        <div class="qrrow"><label class="qron" style="width:110px" for="brName" data-i18n="admin.brand.name">Název</label><input type="text" id="brName" maxlength="60"></div>
+        <div class="qrrow"><label class="qron" style="width:110px" for="brEmail" data-i18n="admin.brand.email">E-mail</label><input type="text" id="brEmail" maxlength="120"></div>
+        <div class="qrrow"><label class="qron" style="width:110px" for="brPhone" data-i18n="admin.brand.phone">Telefon</label><input type="text" id="brPhone" maxlength="40"></div>
+        <div class="qrrow"><label class="qron" style="width:110px" for="brCity" data-i18n="admin.brand.city">Město</label><input type="text" id="brCity" maxlength="80"></div>
+        <div class="qrrow"><label class="qron" style="width:110px" for="brUrl" data-i18n="admin.brand.url">Web / QR 1</label><input type="text" id="brUrl" maxlength="500" placeholder="https://…"></div>
+        <div class="qrrow"><label class="qron" style="width:110px" for="brQrEmail" data-i18n="admin.brand.qrEmail">E-mail pro QR 2</label><input type="text" id="brQrEmail" maxlength="120"></div>
+        <div class="qrrow"><label class="qron" style="width:110px" for="brPwa" data-i18n="admin.brand.pwa">Titulek aplikace</label><input type="text" id="brPwa" maxlength="30"></div>
+        <div class="qrrow"><button class="btn ghost" id="brandSave" data-i18n="admin.brand.save">Uložit kontakty</button></div>
+        <div class="hint" data-i18n="admin.brand.hint">Prázdné pole = výchozí hodnota. Odkaz musí začínat http:// nebo https:// (nebo to musí být e-mail). Špičaté závorky nejsou povolené.</div>
+      </div>
+      <div class="qrset">
+        <label for="qrUrl" data-i18n="admin.qrs.label">QR kódy na úvodní obrazovce (pod sebou) — zaškrtnutí = zobrazit:</label>
+        <div class="qrrow">
+          <label class="qron" title="Zobrazit QR 1 na úvodní obrazovce" data-i18n-attr="title:admin.qrs.on1title"><input type="checkbox" id="qr1On" checked>QR 1</label>
+          <input type="text" id="qrUrl" placeholder="https://www.instagram.com/… nebo name@example.com" data-i18n-attr="placeholder:admin.qrs.url1ph">
+          <button class="btn ghost" id="qrSave" data-i18n="admin.save">Uložit</button>
+        </div>
+        <div class="qrpicks">
+          <button class="chip" id="chipStudio" data-qr="https://example.com/"><svg class="i" aria-hidden="true"><use href="#i-photo"/></svg><span class="lbl" data-i18n="admin.chip.studio">Profil značky</span></button>
+          <button class="chip" id="chipExtra" data-qr="" style="display:none"></button>
+          <button class="chip" id="chipEmail" data-qr="info@example.com"><svg class="i" aria-hidden="true"><use href="#i-mail"/></svg><span class="lbl" data-i18n="admin.chip.email">E-mail značky</span></button>
+        </div>
+        <div class="qrrow">
+          <label class="qron" title="Zobrazit QR 2 na úvodní obrazovce" data-i18n-attr="title:admin.qrs.on2title"><input type="checkbox" id="qr2On" checked>QR 2</label>
+          <input type="text" id="qrUrl2" placeholder="e-mail z kontaktů (výchozí)" data-i18n-attr="placeholder:admin.qrs.url2ph">
+          <button class="btn ghost" id="qrSave2" data-i18n="admin.save">Uložit</button>
+        </div>
+        <div class="hint" data-i18n="admin.qrs.hint">QR 1 je zároveň cíl QR kódu v rohu. Odškrtnuté kódy se na úvodní obrazovce nezobrazí (bez obou zůstane jen logo).</div>
+        <img id="qrPreview" alt="náhled QR" data-i18n-attr="alt:admin.qrs.previewAlt">
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="secAvail" data-sec="avail" aria-live="polite">
+    <summary><span class="st" data-i18n="admin.avail.title">Dostupnost obrazovky (24 h)</span><span class="ss" id="sumAvail"></span></summary>
+    <div class="body">
+      <div class="chips" id="kioskChips"></div>
+      <div class="chips" id="kioskUpdate"></div>
+      <div class="khealth" id="kioskHealth"></div>
+      <div class="availability-bars" id="availabilityBars" aria-label="Historie spojení za posledních 24 hodin" data-i18n-attr="aria-label:admin.avail.histAria"></div>
+      <div class="availability-note" id="availabilityNote" data-i18n="admin.avail.note">Historie spojení přehrávače se serverem, ne fyzický stav TV.</div>
+    </div>
+  </details>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+const I18N = {
+  cs: {
+    "admin.title": "Správa obrazovky",
+    "admin.lang.label": "Jazyk",
+    "admin.device.select": "Vybrat obrazovku",
+    "admin.device.new": "+ Nová obrazovka",
+    "admin.ver.title": "Verze aplikace",
+    "admin.pair.prefix": "Připojit novou TV s kódem",
+    "admin.pair.middle": "k obrazovce",
+    "admin.pair.claim": "Připojit TV",
+    "admin.addr.title": "Adresa a QR obrazovky",
+    "admin.label.label": "Popisek obrazovky",
+    "admin.label.placeholder": "např. Recepce",
+    "admin.label.save": "Uložit popisek",
+    "admin.name.prefix": "Jméno v adrese:",
+    "admin.name.suffix": "— nové obrazovky ho mají náhodné, aby se adresa (a s ní nahraná média) nedala uhodnout. Adresu nikomu neposílej.",
+    "admin.copy": "Kopírovat",
+    "admin.addr.modern": "Moderní chytrá TV / tablet — otevři v prohlížeči tuto adresu.",
+    "admin.addr.legacy": "Starší Samsung panel (neumí https) — použij tuto adresu v Spouštěči URL.",
+    "admin.qr.alt": "QR kód s adresou přehrávače této obrazovky",
+    "admin.qr.hint": "QR s adresou přehrávače (https).",
+    "admin.avail.title": "Dostupnost obrazovky (24 h)",
+    "admin.avail.loading": "Zjišťuji…",
+    "admin.avail.histAria": "Historie spojení za posledních 24 hodin",
+    "admin.avail.note": "Historie spojení přehrávače se serverem, ne fyzický stav TV.",
+    "admin.avail.online": "● online",
+    "admin.avail.offline": "○ offline",
+    "admin.avail.seen": "signál přijat",
+    "admin.avail.gap": "výpadek signálu",
+    "admin.avail.unknown": "bez dat",
+    "admin.avail.coverageNone": "zatím nejsou data",
+    "admin.avail.coverage": "{pct} % známého období",
+    "admin.avail.summary": "Posledních 24 h: {events} hlášení z obrazovky, pokrytí {coverage}. Historie potvrzuje spojení přehrávače se serverem, ne zapnutí TV.",
+    "admin.avail.failed": "Historii se nepodařilo načíst",
+    "admin.ago.none": "zatím se neozvala",
+    "admin.ago.now": "právě teď",
+    "admin.ago.min": "před {n} min",
+    "admin.ago.h": "před {n} h",
+    "admin.add.title": "Přidat obsah",
+    "admin.drop.main": "Přetáhni sem fotky nebo videa",
+    "admin.drop.sub": "nebo klepni a vyber ze zařízení",
+    "admin.specs.photo": "foto: {list}",
+    "admin.specs.video": "video: {list}",
+    "admin.limits": "Max {file} na soubor · max {items} položek na obrazovku · celková kapacita {total}.",
+    "admin.storage.loading": "Zjišťuji volné místo…",
+    "admin.storage.text": "Volné místo: {free} z {total} · využito {used} ({pct} %)",
+    "admin.settings.title": "Nastavení přehrávání",
+    "admin.qrcorner.title": "QR kód v rohu",
+    "admin.qrcorner.desc": "— malý QR přes běžící obsah (volitelné)",
+    "admin.transition.label": "Přechod mezi fotkami",
+    "admin.transition.fade": "Jemné prolnutí",
+    "admin.transition.cut": "Okamžitý střih",
+    "admin.transition.hint": "Videa se kvůli spolehlivosti vždy přepínají střihem.",
+    "admin.transition.fadeOn": "Jemné prolnutí zapnuto",
+    "admin.transition.cutOn": "Okamžitý střih zapnut",
+    "admin.transition.saveFailed": "Nepodařilo se uložit přechod",
+    "admin.fit.label": "Orientace a zaplnění obrazovky",
+    "admin.fit.landscape": "Na šířku — celý obraz, černé pruhy po stranách",
+    "admin.fit.portrait": "Na výšku — pro otočenou obrazovku",
+    "admin.fit.portrait270": "Na výšku, otočeno na druhou stranu",
+    "admin.fit.fill": "Výplň — bez pruhů, okraje se oříznou",
+    "admin.fit.hint": "„Na výšku“ otočí obraz o 90°; vyber ji jen když je obrazovka fyzicky otočená, jinak bude obsah ležet na boku.",
+    "admin.fit.desc.landscape": "Obsah na šířku",
+    "admin.fit.desc.portrait": "Obrazovka na výšku",
+    "admin.fit.desc.portrait270": "Obrazovka na výšku, otočená na druhou stranu",
+    "admin.fit.desc.fill": "Obsah vyplní obrazovku",
+    "admin.fit.saved": "{desc} — obrazovka se přizpůsobí do několika sekund",
+    "admin.fit.saveFailed": "Nepodařilo se uložit orientaci",
+    "admin.qrs.label": "QR kódy na úvodní obrazovce (pod sebou) — zaškrtnutí = zobrazit:",
+    "admin.qrs.on1title": "Zobrazit QR 1 na úvodní obrazovce",
+    "admin.qrs.on2title": "Zobrazit QR 2 na úvodní obrazovce",
+    "admin.qrs.url1ph": "https://www.instagram.com/… nebo name@example.com",
+    "admin.qrs.url2ph": "e-mail z kontaktů (výchozí)",
+    "admin.qrs.url2phDefault": "{email} (výchozí)",
+    "admin.qrs.hint": "QR 1 je zároveň cíl QR kódu v rohu. Odškrtnuté kódy se na úvodní obrazovce nezobrazí (bez obou zůstane jen logo).",
+    "admin.qrs.previewAlt": "náhled QR",
+    "admin.save": "Uložit",
+    "admin.chip.studio": "Profil značky",
+    "admin.chip.email": "E-mail značky",
+    "admin.chip.brandDefault": "Značka",
+    "admin.qr.saved": "QR cíl uložen",
+    "admin.qr2.saved": "Druhý QR cíl uložen",
+    "admin.qr.saveFailed": "QR se nepodařilo uložit",
+    "admin.qr.on": "QR zapnut",
+    "admin.qr.off": "QR na úvodní obrazovce skryt",
+    "admin.corner.on": "QR v rohu zapnut",
+    "admin.corner.off": "QR v rohu vypnut",
+    "admin.settings.saveFailed": "Nepodařilo se uložit nastavení",
+    "admin.brand.label": "Vzhled a kontakty (kontakt v patičce, výchozí QR cíle, název aplikace):",
+    "admin.brand.name": "Název",
+    "admin.brand.email": "E-mail",
+    "admin.brand.phone": "Telefon",
+    "admin.brand.city": "Město",
+    "admin.brand.url": "Web / QR 1",
+    "admin.brand.qrEmail": "E-mail pro QR 2",
+    "admin.brand.pwa": "Titulek aplikace",
+    "admin.brand.save": "Uložit kontakty",
+    "admin.brand.hint": "Prázdné pole = výchozí hodnota. Odkaz musí začínat http:// nebo https:// (nebo to musí být e-mail). Špičaté závorky nejsou povolené.",
+    "admin.brand.saveFail": "Kontakty se nepodařilo uložit: {error}",
+    "admin.brand.saved": "Kontakty uloženy",
+    "admin.brand.saveFailed": "Kontakty se nepodařilo uložit (zkontroluj hodnoty)",
+    "admin.error.generic": "chyba",
+    "admin.playing.title": "Co se přehrává",
+    "admin.playing.order": "(pořadí shora dolů)",
+    "admin.count.zero": "0 položek",
+    "admin.count": "{n} / {max} položek",
+    "admin.used": "využito {used}",
+    "admin.empty.title": "Zatím tu nic není",
+    "admin.empty.sub": "Přetáhni nahoru první fotku nebo video – hned se objeví na obrazovce.",
+    "admin.server.down": "Server neodpovídá – zkusím to znovu…",
+    "admin.load.failed": "Seznam se nepodařilo načíst",
+    "admin.load.failedSub": "Server neodpovídá nebo vrátil chybu. Tvoje položky tím nezmizely.",
+    "admin.load.retry": "Zkusit znovu",
+    "admin.copied": "Adresa zkopírována",
+    "admin.dev.online": "● online",
+    "admin.dev.offline": "○ offline",
+    "admin.dev.noH264": "TV nepřehraje některá videa",
+    "admin.dev.blank": "prázdná obrazovka",
+    "admin.dev.kiosk": "kiosek {v}",
+    "admin.dev.memAll": "vše uloženo v TV",
+    "admin.dev.memPart": "uloženo v TV {v}",
+    "admin.dev.items": "položek: {n}",
+    "admin.chips.silent": "○ obrazovka se neozývá",
+    "admin.chips.browser": "prohlížeč — po výpadku proudu sám nenaběhne",
+    "admin.chips.memAll": "vše uloženo v TV ({v})",
+    "admin.chips.dropped": "vynecháno {pct} % snímků",
+    "admin.chips.stalls": "{n}× čekalo na data",
+    "admin.chips.blank": "obrazovka je prázdná",
+    "admin.dev.kioskNew": "kiosek {v} k dispozici",
+    "admin.kupd.avail": "k dispozici kiosek {v}",
+    "admin.kupd.btn": "Aktualizovat kiosek",
+    "admin.kupd.cancel": "Zrušit aktualizaci",
+    "admin.kupd.pending": "Čeká na box…",
+    "admin.kupd.downloading": "Stahuje…",
+    "admin.kupd.waiting": "Čeká na potvrzení na TV (OK na ovladači)",
+    "admin.kupd.declined": "Nikdo nepotvrdil",
+    "admin.kupd.failed": "Aktualizace selhala",
+    "admin.kupd.noPerm": "Box nemá povolenou instalaci (nutné jednou přes ADB)",
+    "admin.kupd.requested": "Aktualizace kiosku vyžádána, box si ji stáhne do minuty",
+    "admin.kupd.cancelled": "Aktualizace kiosku zrušena",
+    "admin.kupd.reqFailed": "Aktualizaci kiosku se nepodařilo vyžádat",
+    "admin.kupd.cancelFailed": "Aktualizaci kiosku se nepodařilo zrušit",
+    "admin.kh.ram": "{ram} MB volné RAM",
+    "admin.kh.ramLow": "{ram} MB volné RAM (systému dochází paměť)",
+    "admin.kh.wifi": "Wi-Fi {rssi} dBm ({q})",
+    "admin.kh.q.excellent": "výborný",
+    "admin.kh.q.good": "dobrý",
+    "admin.kh.q.weak": "slabý",
+    "admin.kh.q.veryWeak": "velmi slabý",
+    "admin.kh.eth": "kabel",
+    "admin.kh.up": "běží {uptime}",
+    "admin.kh.boots": "restartů: {n}",
+    "admin.kh.bootsHint": "Restarty boxu zjištěné od posledního spuštění serveru",
+    "admin.kh.crash": "pády přehrávače: {n}",
+    "admin.kh.d": "{d} d {h} h",
+    "admin.kh.h": "{h} h {m} min",
+    "admin.kh.m": "{m} min",
+    "admin.new.prompt": "Popisek nové obrazovky (např. Recepce; volitelné):",
+    "admin.new.failed": "Obrazovku se nepodařilo vytvořit",
+    "admin.label.saved": "Popisek uložen",
+    "admin.label.failed": "Popisek nelze uložit",
+    "admin.pair.ok": "TV je připojená k obrazovce „{device}“",
+    "admin.pair.fail": "Kód už neplatí nebo se TV nepodařilo připojit",
+    "admin.tile.video": "video",
+    "admin.tile.photo": "foto",
+    "admin.tile.up": "Nahoru",
+    "admin.tile.down": "Dolů",
+    "admin.tile.secAria": "Doba zobrazení v sekundách",
+    "admin.tile.unit": "s",
+    "admin.tile.from": "Od",
+    "admin.tile.until": "Do",
+    "admin.tile.soundOn": "Zvuk zapnutý",
+    "admin.tile.soundOff": "Zvuk vypnutý",
+    "admin.tile.shown": "Zobrazeno",
+    "admin.tile.hidden": "Skryto",
+    "admin.tile.del": "Smazat",
+    "admin.sound.on": "Zvuk zapnut",
+    "admin.sound.off": "Zvuk vypnut",
+    "admin.sound.failed": "Nepodařilo se změnit zvuk",
+    "admin.vis.on": "Položka zobrazena",
+    "admin.vis.off": "Položka skryta",
+    "admin.vis.failed": "Nepodařilo se změnit viditelnost",
+    "admin.del.pending": "Smazáno: „{name}“",
+    "admin.del.undo": "Vrátit",
+    "admin.del.restored": "Položka vrácena",
+    "admin.del.done": "Položka smazána",
+    "admin.del.failed": "Nepodařilo se smazat položku",
+    "admin.order.saved": "Pořadí uloženo",
+    "admin.order.failed": "Změnu pořadí se nepodařilo uložit",
+    "admin.sec.saved": "Doba uložena: {n} s",
+    "admin.sec.failed": "Dobu se nepodařilo uložit",
+    "admin.sched.saved": "Platnost uložena",
+    "admin.sched.failed": "Platnost se nepodařilo uložit",
+    "admin.brand.title": "Vzhled a kontakty",
+    "admin.status.mem": "uloženo v TV {v}",
+    "admin.sum.fit.landscape": "na šířku",
+    "admin.sum.fit.portrait": "na výšku",
+    "admin.sum.fit.portrait270": "na výšku (otočeno)",
+    "admin.sum.fit.fill": "výplň",
+    "admin.sum.corner": "QR v rohu",
+    "admin.sum.brandDefault": "výchozí hodnoty",
+    "admin.plan.title": "Plánování",
+    "admin.plan.validFrom": "od {d}",
+    "admin.plan.validUntil": "do {d}",
+    "admin.plan.btn": "Rozvrh",
+    "admin.plan.btnAria": "Rozvrh zobrazení (dny a hodiny)",
+    "admin.plan.days": "Dny v týdnu",
+    "admin.plan.from": "Od",
+    "admin.plan.to": "Do",
+    "admin.plan.save": "Uložit",
+    "admin.plan.clear": "Zrušit rozvrh",
+    "admin.plan.everyDay": "každý den",
+    "admin.plan.hint": "Bez vybraného dne platí rozvrh každý den. Když je čas „do“ dřív než „od“, okno přechází přes půlnoc.",
+    "admin.plan.errTimes": "Vyplň čas od i do.",
+    "admin.plan.errSame": "Čas od a do nesmí být stejný.",
+    "admin.plan.saved": "Rozvrh uložen",
+    "admin.plan.cleared": "Rozvrh zrušen",
+    "admin.plan.failed": "Rozvrh se nepodařilo uložit",
+    "admin.plan.d0": "Po", "admin.plan.d1": "Út", "admin.plan.d2": "St", "admin.plan.d3": "Čt",
+    "admin.plan.d4": "Pá", "admin.plan.d5": "So", "admin.plan.d6": "Ne",
+    "admin.up.unsupported": "nepodporovaný typ „.{ext}“ (povolené: {allowed})",
+    "admin.up.empty": "prázdný soubor",
+    "admin.up.tooBig": "soubor je příliš velký ({size}, max {max} MB)",
+    "admin.up.waiting": "čeká…",
+    "admin.up.warned": "hotovo – upozornění",
+    "admin.up.fixed": "hotovo – upraveno",
+    "admin.up.done": "hotovo",
+    "admin.up.error": "chyba",
+    "admin.up.rejected": "server odmítl soubor ({status})",
+    "admin.up.failed": "nahrání selhalo – zkontroluj připojení",
+    "admin.up.inProgress": "nahrávání tohoto souboru už probíhá – chvíli počkej a zkus to znovu",
+    "admin.up.progress": "nahrávám {p} %",
+    "admin.up.starting": "nahrávám…",
+    "admin.up.added.one": "Přidáno {n} soubor",
+    "admin.up.added.few": "Přidáno {n} soubory",
+    "admin.up.added.many": "Přidáno {n} souborů",
+    "admin.up.notAdded.one": "{n} soubor se nenahrál",
+    "admin.up.notAdded.few": "{n} soubory se nenahrály",
+    "admin.up.notAdded.many": "{n} souborů se nenahrálo"
+  },
+  en: {
+    "admin.title": "Screen admin",
+    "admin.lang.label": "Language",
+    "admin.device.select": "Select screen",
+    "admin.device.new": "+ New screen",
+    "admin.ver.title": "App version",
+    "admin.pair.prefix": "Connect a new TV with code",
+    "admin.pair.middle": "to screen",
+    "admin.pair.claim": "Connect TV",
+    "admin.addr.title": "Screen address and QR",
+    "admin.label.label": "Screen label",
+    "admin.label.placeholder": "e.g. Reception",
+    "admin.label.save": "Save label",
+    "admin.name.prefix": "Name in the address:",
+    "admin.name.suffix": "— new screens get a random one, so the address (and the media uploaded to it) can't be guessed. Don't share the address.",
+    "admin.copy": "Copy",
+    "admin.addr.modern": "Modern smart TV / tablet — open this address in the browser.",
+    "admin.addr.legacy": "Older Samsung panel (doesn't support HTTPS) — use this address in URL Launcher.",
+    "admin.qr.alt": "QR code with this screen's player address",
+    "admin.qr.hint": "QR with the player address (https).",
+    "admin.avail.title": "Screen availability (24 h)",
+    "admin.avail.loading": "Checking…",
+    "admin.avail.histAria": "Connection history for the last 24 hours",
+    "admin.avail.note": "Player-to-server connection history, not the physical state of the TV.",
+    "admin.avail.online": "● online",
+    "admin.avail.offline": "○ offline",
+    "admin.avail.seen": "signal received",
+    "admin.avail.gap": "signal gap",
+    "admin.avail.unknown": "no data",
+    "admin.avail.coverageNone": "no data yet",
+    "admin.avail.coverage": "{pct}% of the known period",
+    "admin.avail.summary": "Last 24 h: {events} check-ins, coverage {coverage}. The history confirms the player's connection to the server, not that the TV is on.",
+    "admin.avail.failed": "Couldn't load the history",
+    "admin.ago.none": "no check-ins yet",
+    "admin.ago.now": "just now",
+    "admin.ago.min": "{n} min ago",
+    "admin.ago.h": "{n} h ago",
+    "admin.add.title": "Add content",
+    "admin.drop.main": "Drop photos or videos here",
+    "admin.drop.sub": "or tap to pick from your device",
+    "admin.specs.photo": "photos: {list}",
+    "admin.specs.video": "video: {list}",
+    "admin.limits": "Max {file} per file · max {items} items per screen · total capacity {total}.",
+    "admin.storage.loading": "Checking free space…",
+    "admin.storage.text": "Free space: {free} of {total} · used {used} ({pct}%)",
+    "admin.settings.title": "Playback settings",
+    "admin.qrcorner.title": "QR code in the corner",
+    "admin.qrcorner.desc": "— a small QR code over the playing content (optional)",
+    "admin.transition.label": "Transition between photos",
+    "admin.transition.fade": "Crossfade",
+    "admin.transition.cut": "Instant cut",
+    "admin.transition.hint": "Videos always switch with a cut, for reliability.",
+    "admin.transition.fadeOn": "Soft crossfade on",
+    "admin.transition.cutOn": "Instant cut on",
+    "admin.transition.saveFailed": "Couldn't save the transition",
+    "admin.fit.label": "Orientation and fit",
+    "admin.fit.landscape": "Landscape — whole picture, black side bars",
+    "admin.fit.portrait": "Portrait — for an upright screen",
+    "admin.fit.portrait270": "Portrait, rotated the opposite way",
+    "admin.fit.fill": "Fill — no bars, edges are cropped",
+    "admin.fit.hint": "“Portrait” rotates the content by 90°. Choose it only if the screen is physically rotated; otherwise the content will appear on its side.",
+    "admin.fit.desc.landscape": "Landscape content",
+    "admin.fit.desc.portrait": "Portrait screen",
+    "admin.fit.desc.portrait270": "Portrait screen, rotated the opposite way",
+    "admin.fit.desc.fill": "Content fills the screen",
+    "admin.fit.saved": "{desc} — the screen will adapt within a few seconds",
+    "admin.fit.saveFailed": "Couldn't save the orientation",
+    "admin.qrs.label": "QR codes on the idle screen (stacked) — tick to show:",
+    "admin.qrs.on1title": "Show QR 1 on the idle screen",
+    "admin.qrs.on2title": "Show QR 2 on the idle screen",
+    "admin.qrs.url1ph": "https://www.instagram.com/… or name@example.com",
+    "admin.qrs.url2ph": "e-mail from contacts (default)",
+    "admin.qrs.url2phDefault": "{email} (default)",
+    "admin.qrs.hint": "QR 1 is also the target of the corner QR code. Unticked codes are not shown on the idle screen (with neither, only the logo stays).",
+    "admin.qrs.previewAlt": "QR preview",
+    "admin.save": "Save",
+    "admin.chip.studio": "Brand profile",
+    "admin.chip.email": "Brand e-mail",
+    "admin.chip.brandDefault": "Brand",
+    "admin.qr.saved": "QR target saved",
+    "admin.qr2.saved": "Second QR target saved",
+    "admin.qr.saveFailed": "Couldn't save the QR",
+    "admin.qr.on": "QR on",
+    "admin.qr.off": "QR hidden on the idle screen",
+    "admin.corner.on": "Corner QR on",
+    "admin.corner.off": "Corner QR off",
+    "admin.settings.saveFailed": "Couldn't save the settings",
+    "admin.brand.label": "Look and contacts (footer contact, default QR targets, app name):",
+    "admin.brand.name": "Name",
+    "admin.brand.email": "E-mail",
+    "admin.brand.phone": "Phone",
+    "admin.brand.city": "City",
+    "admin.brand.url": "Website / QR 1",
+    "admin.brand.qrEmail": "E-mail for QR 2",
+    "admin.brand.pwa": "App title",
+    "admin.brand.save": "Save contacts",
+    "admin.brand.hint": "Empty field = default value. A link must start with http:// or https:// (or be an e-mail address). Angle brackets are not allowed.",
+    "admin.brand.saveFail": "Couldn't save the contacts: {error}",
+    "admin.brand.saved": "Contacts saved",
+    "admin.brand.saveFailed": "Couldn't save the contacts (check the values)",
+    "admin.error.generic": "error",
+    "admin.playing.title": "Now playing",
+    "admin.playing.order": "(top to bottom)",
+    "admin.count.zero": "0 items",
+    "admin.count": "{n} / {max} items",
+    "admin.used": "used {used}",
+    "admin.empty.title": "Nothing here yet",
+    "admin.empty.sub": "Drop your first photo or video above – it shows up on the screen right away.",
+    "admin.server.down": "The server isn't responding – retrying…",
+    "admin.load.failed": "Couldn't load the list",
+    "admin.load.failedSub": "The server isn't responding or returned an error. Your items are safe.",
+    "admin.load.retry": "Try again",
+    "admin.copied": "Address copied",
+    "admin.dev.online": "● online",
+    "admin.dev.offline": "○ offline",
+    "admin.dev.noH264": "this TV can't play some videos",
+    "admin.dev.blank": "blank screen",
+    "admin.dev.kiosk": "kiosk {v}",
+    "admin.dev.memAll": "all stored on the TV",
+    "admin.dev.memPart": "stored on the TV {v}",
+    "admin.dev.items": "items: {n}",
+    "admin.chips.silent": "○ screen not responding",
+    "admin.chips.browser": "browser — won't restart by itself after a power outage",
+    "admin.chips.memAll": "all stored on the TV ({v})",
+    "admin.chips.dropped": "{pct}% of frames dropped",
+    "admin.chips.stalls": "waited for data {n}×",
+    "admin.chips.blank": "screen is blank",
+    "admin.dev.kioskNew": "kiosk {v} available",
+    "admin.kupd.avail": "kiosk {v} available",
+    "admin.kupd.btn": "Update kiosk",
+    "admin.kupd.cancel": "Cancel update",
+    "admin.kupd.pending": "Waiting for the box…",
+    "admin.kupd.downloading": "Downloading…",
+    "admin.kupd.waiting": "Waiting for confirmation on the TV (OK on the remote)",
+    "admin.kupd.declined": "Nobody confirmed",
+    "admin.kupd.failed": "Update failed",
+    "admin.kupd.noPerm": "The box is not allowed to install apps (needs a one-time ADB setup)",
+    "admin.kupd.requested": "Kiosk update requested, the box will fetch it within a minute",
+    "admin.kupd.cancelled": "Kiosk update cancelled",
+    "admin.kupd.reqFailed": "Could not request the kiosk update",
+    "admin.kupd.cancelFailed": "Could not cancel the kiosk update",
+    "admin.kh.ram": "{ram} MB free RAM",
+    "admin.kh.ramLow": "{ram} MB free RAM (system is low on memory)",
+    "admin.kh.wifi": "Wi-Fi {rssi} dBm ({q})",
+    "admin.kh.q.excellent": "excellent",
+    "admin.kh.q.good": "good",
+    "admin.kh.q.weak": "weak",
+    "admin.kh.q.veryWeak": "very weak",
+    "admin.kh.eth": "cable",
+    "admin.kh.up": "up {uptime}",
+    "admin.kh.boots": "restarts: {n}",
+    "admin.kh.bootsHint": "Box restarts detected since the server last started",
+    "admin.kh.crash": "player crashes: {n}",
+    "admin.kh.d": "{d} d {h} h",
+    "admin.kh.h": "{h} h {m} min",
+    "admin.kh.m": "{m} min",
+    "admin.new.prompt": "New screen label (e.g. Reception; optional):",
+    "admin.new.failed": "Couldn't create the screen",
+    "admin.label.saved": "Label saved",
+    "admin.label.failed": "Can't save the label",
+    "admin.pair.ok": "TV connected to screen \"{device}\"",
+    "admin.pair.fail": "The code has expired or the TV couldn't be connected",
+    "admin.tile.video": "video",
+    "admin.tile.photo": "photo",
+    "admin.tile.up": "Up",
+    "admin.tile.down": "Down",
+    "admin.tile.secAria": "Display time in seconds",
+    "admin.tile.unit": "s",
+    "admin.tile.from": "From",
+    "admin.tile.until": "To",
+    "admin.tile.soundOn": "Sound on",
+    "admin.tile.soundOff": "Sound off",
+    "admin.tile.shown": "Visible",
+    "admin.tile.hidden": "Hidden",
+    "admin.tile.del": "Delete",
+    "admin.sound.on": "Sound on",
+    "admin.sound.off": "Sound off",
+    "admin.sound.failed": "Couldn't change the sound",
+    "admin.vis.on": "Item visible",
+    "admin.vis.off": "Item hidden",
+    "admin.vis.failed": "Couldn't change visibility",
+    "admin.del.pending": "Deleted: \"{name}\"",
+    "admin.del.undo": "Undo",
+    "admin.del.restored": "Item restored",
+    "admin.del.done": "Item deleted",
+    "admin.del.failed": "Couldn't delete the item",
+    "admin.order.saved": "Order saved",
+    "admin.order.failed": "Couldn't save the new order",
+    "admin.sec.saved": "Duration saved: {n} s",
+    "admin.sec.failed": "Couldn't save the duration",
+    "admin.sched.saved": "Dates saved",
+    "admin.sched.failed": "Couldn't save the validity",
+    "admin.brand.title": "Look and contacts",
+    "admin.status.mem": "stored on the TV {v}",
+    "admin.sum.fit.landscape": "landscape",
+    "admin.sum.fit.portrait": "portrait",
+    "admin.sum.fit.portrait270": "portrait (flipped)",
+    "admin.sum.fit.fill": "fill",
+    "admin.sum.corner": "corner QR",
+    "admin.sum.brandDefault": "default values",
+    "admin.plan.title": "Scheduling",
+    "admin.plan.validFrom": "from {d}",
+    "admin.plan.validUntil": "until {d}",
+    "admin.plan.btn": "Schedule",
+    "admin.plan.btnAria": "Display schedule (days and hours)",
+    "admin.plan.days": "Days of the week",
+    "admin.plan.from": "From",
+    "admin.plan.to": "To",
+    "admin.plan.save": "Save",
+    "admin.plan.clear": "Remove schedule",
+    "admin.plan.everyDay": "every day",
+    "admin.plan.hint": "With no day selected the schedule applies every day. If \"to\" is earlier than \"from\", the window runs past midnight.",
+    "admin.plan.errTimes": "Enter both a start and an end time.",
+    "admin.plan.errSame": "From and to must not be the same time.",
+    "admin.plan.saved": "Schedule saved",
+    "admin.plan.cleared": "Schedule removed",
+    "admin.plan.failed": "Couldn't save the schedule",
+    "admin.plan.d0": "Mon", "admin.plan.d1": "Tue", "admin.plan.d2": "Wed", "admin.plan.d3": "Thu",
+    "admin.plan.d4": "Fri", "admin.plan.d5": "Sat", "admin.plan.d6": "Sun",
+    "admin.up.unsupported": "unsupported type \".{ext}\" (allowed: {allowed})",
+    "admin.up.empty": "empty file",
+    "admin.up.tooBig": "file is too large ({size}, max {max} MB)",
+    "admin.up.waiting": "waiting…",
+    "admin.up.warned": "done – warning",
+    "admin.up.fixed": "done – adjusted",
+    "admin.up.done": "done",
+    "admin.up.error": "error",
+    "admin.up.rejected": "server rejected the file ({status})",
+    "admin.up.failed": "upload failed – check your connection",
+    "admin.up.inProgress": "this file is already being uploaded – wait a moment and try again",
+    "admin.up.progress": "uploading {p} %",
+    "admin.up.starting": "uploading…",
+    "admin.up.added.one": "Added {n} file",
+    "admin.up.added.few": "Added {n} files",
+    "admin.up.added.many": "Added {n} files",
+    "admin.up.notAdded.one": "{n} file failed to upload",
+    "admin.up.notAdded.few": "{n} files failed to upload",
+    "admin.up.notAdded.many": "{n} files failed to upload"
+  }
+};
+
+const I18N_KEY = 'signageLang';
+function pickLang(query, stored, nav){
+  const norm = v => { v = String(v == null ? '' : v).toLowerCase(); return v === 'en' || v.indexOf('en-') === 0 || v.indexOf('en_') === 0 ? 'en' : v === 'cs' || v.indexOf('cs-') === 0 ? 'cs' : null; };
+  return norm(query) || norm(stored) || (String(nav || '').toLowerCase().indexOf('en') === 0 ? 'en' : 'cs');
+}
+function readLang(){
+  let q = null, s = null;
+  try { q = new URLSearchParams(location.search).get('lang'); } catch (e) {}
+  try { s = localStorage.getItem(I18N_KEY); } catch (e) {}
+  return pickLang(q, s, typeof navigator !== 'undefined' ? navigator.language : '');
+}
+let LANG = readLang();
+function t(key, params){
+  let s = (I18N[LANG] || {})[key];
+  if (s == null) s = I18N.cs[key];
+  if (s == null) s = key;
+  return params ? s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m)) : s;
+}
+function ico(name, only){
+  return '<svg class="i' + (only ? ' only' : '') + '" aria-hidden="true" focusable="false"><use href="#i-' + name + '"/></svg>';
+}
+function dateLocale(){ return LANG === 'en' ? 'en-GB' : 'cs-CZ'; }
+function setLang(l){
+  if (l !== 'cs' && l !== 'en') return;
+  LANG = l;
+  try { localStorage.setItem(I18N_KEY, l); } catch (e) {}
+}
+function applyI18n(){
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-attr]').forEach(e => {
+    e.getAttribute('data-i18n-attr').split(';').forEach(p => {
+      const i = p.indexOf(':');
+      if (i > 0) e.setAttribute(p.slice(0, i).trim(), t(p.slice(i + 1).trim()));
+    });
+  });
+  document.querySelectorAll('[data-lang]').forEach(b => {
+    const on = b.getAttribute('data-lang') === LANG;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+</script>
+<script>
+// screen: ?device=... > last used (localStorage) > (after the list loads) online > default
+const DEVICE_KEY = 'signageDevice';
+function readStoredDevice(){ try { return localStorage.getItem(DEVICE_KEY) || ''; } catch (e) { return ''; } }
+function rememberDevice(d){ try { localStorage.setItem(DEVICE_KEY, d); } catch (e) { /* private window etc. */ } }
+const DEVICE_EXPLICIT = new URLSearchParams(location.search).get('device') || '';
+const DEVICE_STORED = DEVICE_EXPLICIT ? '' : readStoredDevice();
+const DEVICE = DEVICE_EXPLICIT || DEVICE_STORED || 'default';
+let devicePickDone = false;
+// collapsible sections under the list: the browser remembers open/closed (closed by default)
+const SEC_KEY = 'signageSections';
+function readSections(){ try { const o = JSON.parse(localStorage.getItem(SEC_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } }
+function saveSection(name, open){ try { const o = readSections(); o[name] = !!open; localStorage.setItem(SEC_KEY, JSON.stringify(o)); } catch (e) { /* private window etc. */ } }
+function initSections(){
+  const st = readSections();
+  document.querySelectorAll('details.sec[data-sec]').forEach(d => {
+    if (st[d.dataset.sec] === true) d.open = true;
+    d.addEventListener('toggle', () => saveSection(d.dataset.sec, d.open));
+  });
+}
+// brief summaries of closed sections (textContent)
+function updateSummaries(){
+  const set = (id, text) => { const e = $(id); if (e) e.textContent = text; };
+  const fit = ['landscape', 'portrait', 'portrait270', 'fill'].indexOf(settings.fit) >= 0 ? settings.fit : 'landscape';
+  set('sumPlay', [t(settings.transition === 'cut' ? 'admin.transition.cut' : 'admin.transition.fade'),
+                  t('admin.sum.fit.' + fit), settings.qrCorner ? t('admin.sum.corner') : ''].filter(Boolean).join(' · '));
+  const b = settings.brand || {};
+  set('sumBrand', [b.name, b.email, b.phone, b.city].filter(Boolean).slice(0, 2).join(' · ') || t('admin.sum.brandDefault'));
+}
+const PAIR_CODE = (new URLSearchParams(location.search).get('pair') || '').toUpperCase();
+const $ = (id) => document.getElementById(id);
+let itemsCache = [];
+let settings = {};
+
+const BRAND_FIELDS = {name:'brName', email:'brEmail', phone:'brPhone', city:'brCity',
+                      url:'brUrl', qrEmail:'brQrEmail', pwaTitle:'brPwa'};
+function applyBrandUI(){
+  const b = settings.brand || {};
+  for (const k in BRAND_FIELDS) {
+    const el = $(BRAND_FIELDS[k]);
+    if (el && document.activeElement !== el) el.value = b[k] || '';
+  }
+  // QR chips from the brand (textContent; target via a data attribute)
+  const cs = $('chipStudio');
+  if (cs && b.url) { cs.dataset.qr = b.url; cs.querySelector('.lbl').textContent = (b.name || t('admin.chip.brandDefault')); }
+  const cx = $('chipExtra');
+  if (cx) {
+    const extraLabel = (LANG === 'en' ? b.extraQrLabelEn : b.extraQrLabelCs) || b.extraQrLabelCs || b.extraQrLabelEn;
+    cx.style.display = (b.extraQrUrl && extraLabel) ? '' : 'none';
+    if (b.extraQrUrl && extraLabel) { cx.dataset.qr = b.extraQrUrl; cx.textContent = extraLabel; }
+  }
+  const ce = $('chipEmail');
+  if (ce && b.qrEmail) { ce.dataset.qr = b.qrEmail; ce.querySelector('.lbl').textContent = b.qrEmail; }
+  const u2 = $('qrUrl2'); if (u2 && b.qrEmail) u2.placeholder = t('admin.qrs.url2phDefault', {email: b.qrEmail});
+  const pwaTitle = b.pwaTitle || b.name;
+  if (pwaTitle) {
+    const m = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (m) m.setAttribute('content', pwaTitle);
+  }
+}
+async function saveBrand(){
+  const brand = {};
+  for (const k in BRAND_FIELDS) brand[k] = $(BRAND_FIELDS[k]).value.trim();
+  try {
+    const r = await api('/api/settings', {device:DEVICE, brand});
+    if (!r || !r.ok) { toast(t('admin.brand.saveFail', {error: (r && r.error) || t('admin.error.generic')}), 'bad'); return; }
+    toast(t('admin.brand.saved'), 'ok');
+    await load();
+  } catch (err) { toast(failMsg('admin.brand.saveFailed', err), 'bad'); }
+}
+function applySettingsUI(){
+  applyBrandUI();
+  updateSummaries();
+  const c = $('qrCorner'); if (c) c.checked = !!settings.qrCorner;
+  const q1 = $('qr1On'); if (q1) q1.checked = settings.qr1On !== false;
+  const q2 = $('qr2On'); if (q2) q2.checked = settings.qr2On !== false;
+  const u2 = $('qrUrl2');
+  if (u2 && document.activeElement !== u2) u2.value = settings.qrUrl2 || '';
+  const trSel = $("transition"); if (trSel) trSel.value = settings.transition === "cut" ? "cut" : "fade";
+  const z = $("fitMode");
+  if (z) z.value = ["landscape", "portrait", "portrait270", "fill"].indexOf(settings.fit) >= 0
+                 ? settings.fit : "landscape";
+  const u = $('qrUrl');
+  if (u && document.activeElement !== u) u.value = settings.qrUrl || '';
+  const pv = $('qrPreview');
+  if (pv) { pv.src = '/qr.png?device=' + encodeURIComponent(DEVICE) + '&_=' + Date.now();
+            pv.style.display = 'block'; }
+}
+function applyPairUI(){
+  const box=$('pairBox'); if (!box || !/^[A-Z2-9]{6}$/.test(PAIR_CODE)) return;
+  box.classList.add('on'); $('pairCode').textContent=PAIR_CODE; $('pairDevice').textContent=DEVICE;
+}
+async function saveQrUrl(url){
+  try {
+    await api('/api/settings', {device:DEVICE, qrUrl:url});
+    settings.qrUrl = url;
+    const pv = $('qrPreview');
+    if (pv) pv.src = '/qr.png?device=' + encodeURIComponent(DEVICE) + '&_=' + Date.now();
+    toast(t('admin.qr.saved'), 'ok');
+  } catch (err) { toast(failMsg('admin.qr.saveFailed', err), 'bad'); }
+}
+async function saveQrUrl2(url){
+  try {
+    await api('/api/settings', {device:DEVICE, qrUrl2:url});
+    settings.qrUrl2 = url;
+    toast(t('admin.qr2.saved'), 'ok');
+  } catch (err) { toast(failMsg('admin.qr.saveFailed', err), 'bad'); }
+}
+// checkbox turns the QR card on/off on the idle screen (per screen)
+function bindQrToggle(id, key){
+  const box = $(id);
+  if (!box) return;
+  box.addEventListener('change', async () => {
+    try {
+      await api('/api/settings', {device:DEVICE, [key]: box.checked});
+      settings[key] = box.checked;
+      toast(box.checked ? t('admin.qr.on') : t('admin.qr.off'), 'ok');
+    } catch (err) { toast(failMsg('admin.settings.saveFailed', err), 'bad'); box.checked = !box.checked; }
+  });
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const bsave = $('brandSave'); if (bsave) bsave.addEventListener('click', saveBrand);
+  const save = $('qrSave'); if (save) save.addEventListener('click', () => saveQrUrl($('qrUrl').value.trim()));
+  const save2 = $('qrSave2'); if (save2) save2.addEventListener('click', () => saveQrUrl2($('qrUrl2').value.trim()));
+  bindQrToggle('qr1On', 'qr1On');
+  bindQrToggle('qr2On', 'qr2On');
+  document.querySelectorAll('.chip[data-qr]').forEach(ch =>
+    ch.addEventListener('click', () => { $('qrUrl').value = ch.dataset.qr; saveQrUrl(ch.dataset.qr); }));
+});
+window.addEventListener("DOMContentLoaded", () => {
+  const trSel = $("transition");
+  if (trSel) trSel.addEventListener("change", async () => {
+    const transition = trSel.value === "cut" ? "cut" : "fade";
+    try {
+      await api("/api/settings", {device:DEVICE, transition});
+      settings.transition = transition;
+      toast(transition === "fade" ? t("admin.transition.fadeOn") : t("admin.transition.cutOn"), "ok");
+    } catch (err) { toast(failMsg("admin.transition.saveFailed", err), "bad"); applySettingsUI(); }
+  });
+  // the setting is called "fit" on the wire (request, playlist settings, server
+  // state) with values landscape/portrait/portrait270/fill
+  const z = $("fitMode");
+  if (z) z.addEventListener("change", async () => {
+    const fitMode = z.value;
+    const desc = t("admin.fit.desc." + (["landscape", "portrait", "portrait270", "fill"].indexOf(fitMode) >= 0 ? fitMode : "landscape"));
+    try {
+      await api("/api/settings", {device:DEVICE, fit: fitMode});
+      settings.fit = fitMode;
+      toast(t("admin.fit.saved", {desc}), "ok");
+    } catch (err) { toast(failMsg("admin.fit.saveFailed", err), "bad"); applySettingsUI(); }
+  });
+});
+// QR-in-the-corner toggle (per screen)
+window.addEventListener('DOMContentLoaded', () => {
+  const c = $('qrCorner');
+  if (c) c.addEventListener('change', async () => {
+    try {
+      await api('/api/settings', {device:DEVICE, qrCorner: c.checked});
+      toast(c.checked ? t('admin.corner.on') : t('admin.corner.off'), 'ok');
+    } catch (err) { toast(failMsg('admin.settings.saveFailed', err), 'bad'); c.checked = !c.checked; }
+  });
+});
+let uploading = false;      // pauses auto-refresh during upload
+let queueActive = false;
+const uploadQueue = [];
+
+// limits: default = backend defaults, but /api/health returns the real ones
+// (overwritten in refreshHealth, so the UI never lies when env changes)
+let MAX_FILE_MB  = 100;
+let MAX_ITEMS    = 50;
+let MAX_TOTAL_MB = 2000;
+const IMG_EXT = ['jpg','jpeg','png','webp','gif'];
+const VID_EXT = ['mp4','m4v','webm','mov'];
+const ALL_EXT = IMG_EXT.concat(VID_EXT);
+
+// default device => short address /tv/ ; named => /tv/<name>
+const tvPath = (DEVICE === 'default') ? '/tv/' : `/tv/${encodeURIComponent(DEVICE)}`;
+const host = location.host;
+const tvUrl     = `https://${host}${tvPath}`;   // modern TV / tablet
+const tvUrlHttp = `http://${host}${tvPath}`;    // older Samsung panel
+$('tvurl').textContent = tvUrl;
+$('sumAddr').textContent = tvUrl;
+$('tvurlHttp').textContent = tvUrlHttp;
+$('screenName').textContent = DEVICE;
+$('screenQr').src = '/api/screens/' + encodeURIComponent(DEVICE) + '/qr.png';
+async function copyUrl(url){
+  try { await navigator.clipboard.writeText(url); toast(t('admin.copied'), 'ok'); }
+  catch { toast(url); }
+}
+$('copy').onclick = () => copyUrl(tvUrl);
+$('copyHttp').onclick = () => copyUrl(tvUrlHttp);
+
+function adminUrl(device){
+  const url = new URL(location.href);
+  if (device === "default") url.searchParams.delete("device");
+  else url.searchParams.set("device", device);
+  return url.pathname + (url.search || "");
+}
+async function loadDevices(){
+  const select = $("deviceSelect");
+  if (!select) return;
+  try {
+    const r = await fetch("/api/devices", {cache:"no-store", headers:langHeaders()});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    const names = Object.keys(data.devices || {});
+    if (!devicePickDone) {
+      devicePickDone = true;
+      // without ?device=: a stored screen that no longer exists, or an offline default -> try an online one
+      const known = !!(data.devices && data.devices[DEVICE]);
+      if (!DEVICE_EXPLICIT && (!DEVICE_STORED || !known)) {
+        const online = names.filter(n => data.devices[n] && data.devices[n].online);
+        const pick = (known && data.devices[DEVICE].online) ? DEVICE
+                   : online.includes('default') ? 'default' : (online[0] || (names.includes('default') ? 'default' : DEVICE));
+        if (pick !== DEVICE) { rememberDevice(pick); location.replace(adminUrl(pick)); return; }
+      }
+      if (known) rememberDevice(DEVICE);
+    }
+    if (!names.includes(DEVICE)) names.push(DEVICE);
+    names.sort((a, b) => a === "default" ? -1 : b === "default" ? 1 : a.localeCompare(b));
+    select.innerHTML = "";
+    names.forEach(name => {
+      const opt = document.createElement("option");
+      const meta = data.devices && data.devices[name];
+      // "blank" = the screen responds but the player gets nothing on it.
+      // A browser without H.264 is a fault of its own - it plays no video
+      // whatever the file, so hunting for the error in the content is pointless.
+      const state = !meta || !meta.online ? t("admin.dev.offline")
+                  : meta.h264 === false ? t("admin.dev.noH264")
+                  : meta.blank ? t("admin.dev.blank") : t("admin.dev.online");
+      // Kiosk = the screen runs in our app on the box, so it starts by itself
+      // after a power outage. Without the mark it is an ordinary browser where
+      // someone has to tap after a restart - an important difference for the client.
+      const kioskInfo = (meta && meta.online && meta.kiosk ? " · " + t("admin.dev.kiosk", {v: meta.kiosk}) : "")
+                   + (kioskNewer(meta, data.kiosk_release) ? " · " + t("admin.dev.kioskNew", {v: data.kiosk_release.versionName}) : "");
+      // "in memory" (API field cached_items) = how many playlist
+      // items are downloaded in the browser. When it is not all of them, the
+      // screen will not reach the end of the loop after the network is cut.
+      let memInfo = "";
+      if (meta && meta.online && meta.cached_items) {
+        const [have, total] = meta.cached_items.split("/").map(Number);
+        memInfo = " · " + (have >= total ? t("admin.dev.memAll") : t("admin.dev.memPart", {v: meta.cached_items}));
+      }
+      const extra = kioskInfo + memInfo;
+      // the label (if any) instead of the name; the name stays in parentheses, it is the identifier in the URL
+      const lab = meta && meta.label ? meta.label + " (" + name + ")" : name;
+      // the status (online/offline) goes first - a closed select is cut off on the right, so the status is always visible
+      opt.value = name; opt.textContent = meta ? state + " · " + lab + extra + " · " + t("admin.dev.items", {n: meta.count}) : lab;
+      select.appendChild(opt);
+    });
+    select.value = DEVICE;
+    const me = data.devices && data.devices[DEVICE];
+    const li = $("screenLabel");
+    if (li && document.activeElement !== li) li.value = me && me.label ? me.label : "";
+  } catch {
+    select.innerHTML = "";
+    const opt = document.createElement("option"); opt.value = DEVICE; opt.textContent = DEVICE; select.appendChild(opt);
+  }
+}
+function ago(timestamp){
+  if (!timestamp) return t('admin.ago.none');
+  const seconds = Math.max(0, Math.round(Date.now()/1000 - timestamp));
+  if (seconds < 60) return t('admin.ago.now');
+  if (seconds < 3600) return t('admin.ago.min', {n: Math.round(seconds/60)});
+  return t('admin.ago.h', {n: Math.round(seconds/3600)});
+}
+async function loadAvailability(){
+  try {
+    const r = await fetch(`/api/devices/${encodeURIComponent(DEVICE)}/availability?hours=24`, {cache:'no-store', headers:langHeaders()});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const state = $('availabilityState');
+    state.textContent = data.online ? t('admin.avail.online') : t('admin.avail.offline');
+    state.className = 'availability-state ' + (data.online ? 'online' : 'offline');
+    $('availabilityWhen').textContent = ago(data.live_last_seen || data.last_seen);
+    const bars = $('availabilityBars'); bars.innerHTML = '';
+    (data.buckets || []).forEach(slot => {
+      const bar = document.createElement('i');
+      bar.className = 'availability-bar ' + slot.state;
+      const from = new Date(slot.at * 1000).toLocaleString(dateLocale());
+      bar.title = from + ' · ' + t('admin.avail.' + (['seen','gap','unknown'].indexOf(slot.state) >= 0 ? slot.state : 'unknown'));
+      bars.appendChild(bar);
+    });
+    const coverage = data.coverage_pct === null ? t('admin.avail.coverageNone') : t('admin.avail.coverage', {pct: data.coverage_pct});
+    $('availabilityNote').textContent = t('admin.avail.summary', {events: data.events, coverage});
+    $('sumAvail').textContent = state.textContent + ' · ' + coverage;
+  } catch {
+    $('availabilityState').textContent = t('admin.avail.failed');
+    $('availabilityState').className = 'availability-state offline';
+    $('sumAvail').textContent = t('admin.avail.failed');
+  }
+}
+$("deviceSelect").addEventListener("change", ev => { rememberDevice(ev.target.value); location.assign(adminUrl(ev.target.value)); });
+$("newDevice").addEventListener("click", async () => {
+  const raw = window.prompt(t("admin.new.prompt"));
+  if (raw === null) return;
+  try {
+    const r = await api("/api/screens", {label: raw.trim()});
+    if (!r || !r.ok) { toast((r && r.error) || t("admin.new.failed"), "bad"); return; }
+    location.assign(adminUrl(r.device));
+  } catch (err) { toast(failMsg("admin.new.failed", err), "bad"); }
+});
+$("saveLabel").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/settings", {device:DEVICE, label:$("screenLabel").value.trim()});
+    if (!r || !r.ok) { toast((r && r.error) || t("admin.label.failed"), "bad"); return; }
+    toast(t("admin.label.saved"), "ok");
+    await loadDevices();
+  } catch (err) { toast(failMsg("admin.label.failed", err), "bad"); }
+});
+$("pairClaim").addEventListener("click", async () => {
+  try {
+    const r=await api('/api/pair/claim',{code:PAIR_CODE,device:DEVICE});
+    if (!r.ok) { toast((r && r.error) || t('admin.pair.fail'), 'bad'); return; }
+    toast(t('admin.pair.ok', {device: DEVICE}),'ok');
+    $('pairBox').classList.remove('on');
+    history.replaceState(null,'',adminUrl(DEVICE));
+  } catch (err) { toast(failMsg('admin.pair.fail', err), 'bad'); }
+});
+// static labels for formats + limits
+function sndLabel(on){ return ico(on ? 'volume' : 'mute') + esc(t(on ? 'admin.tile.soundOn' : 'admin.tile.soundOff')); }
+function visLabel(on){ return ico(on ? 'eye' : 'eyeoff') + esc(t(on ? 'admin.tile.shown' : 'admin.tile.hidden')); }
+function renderStatic(){
+  $('specs').innerHTML =
+    '<span class="pill">' + ico('photo') + esc(t('admin.specs.photo', {list: IMG_EXT.map(e=>e.toUpperCase()).join(', ')})) + '</span>' +
+    '<span class="pill">' + ico('video') + esc(t('admin.specs.video', {list: VID_EXT.map(e=>e.toUpperCase()).join(', ')})) + '</span>';
+  $('limits').innerHTML = tb('admin.limits', {file: MAX_FILE_MB + ' MB', items: MAX_ITEMS, total: MAX_TOTAL_MB + ' MB'}, ['file', 'items', 'total']);
+}
+// translation with bold values: the translation text is escaped, it normally has no HTML
+function tb(key, params, bold){
+  return esc(t(key)).replace(/\{(\w+)\}/g, (m, k) => !(k in params) ? m
+    : bold.indexOf(k) >= 0 ? '<b>' + esc(params[k]) + '</b>' : esc(params[k]));
+}
+function langHeaders(extra){ return Object.assign({'Accept-Language': LANG}, extra || {}); }
+applyI18n();
+renderStatic();
+initSections();
+function switchLang(l){
+  setLang(l);
+  applyI18n();
+  renderStatic();
+  render();
+  applyBrandUI();
+  updateSummaries();
+  loadDevices(); loadAvailability(); refreshHealth();
+}
+document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => switchLang(b.dataset.lang)));
+
+const msg = (id, text, cls='') => { const e=$(id); e.textContent=text||''; e.className='msg '+cls; };
+
+// toast: ok 4.5 s, error 9 s (so it can be read); role=status, alert for an error.
+// opts: {ms, action:{label, fn}} - a button in the toast (e.g. "Undo")
+let toastTimer;
+function toast(text, cls='', opts){
+  opts = opts || {};
+  const e=$('toast');
+  e.setAttribute('role', cls === 'bad' ? 'alert' : 'status');
+  e.textContent = '';
+  const span = document.createElement('span'); span.textContent = text; e.appendChild(span);
+  if (opts.action) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'toast-act'; b.textContent = opts.action.label;
+    b.addEventListener('click', () => { clearTimeout(toastTimer); e.className = 'toast ' + cls; opts.action.fn(); });
+    e.appendChild(b);
+  }
+  e.className = 'toast show ' + cls + (opts.action ? ' act' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { e.className = 'toast ' + cls; }, opts.ms || (cls === 'bad' ? 9000 : 4500));
+}
+
+function fmtMB(mb){ return Math.round(mb) + ' MB'; }
+function fmtSize(bytes){
+  if (bytes >= 1024*1024) return (bytes/1024/1024).toFixed(1).replace('.', LANG === 'en' ? '.' : ',') + ' MB';
+  return Math.max(1, Math.round(bytes/1024)) + ' kB';
+}
+function extOf(name){ const m=/\.([^.]+)$/.exec(name||''); return m ? m[1].toLowerCase() : ''; }
+// protects against HTML breakage by special characters in a file name (quotes, <, >...)
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function api(path, body) {
+  const r = await fetch(path, body ? {
+    method: 'POST', headers: langHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body)
+  } : {headers: langHeaders()});
+  let d = null;
+  try { d = await r.json(); } catch (e) { /* the body need not be JSON */ }
+  if (!r.ok) {
+    // the server refused (400/429/507...): the reason is in `error` (already in the right language)
+    const err = new Error((d && d.error) || ('HTTP ' + r.status));
+    err.server = !!(d && d.error); err.status = r.status;
+    throw err;
+  }
+  return d;
+}
+// text of an error toast: a fixed message + the reason from the server, if any
+function failMsg(key, err){ return t(key) + (err && err.server ? ' – ' + err.message : ''); }
+
+async function refreshHealth(){
+  try{
+    const h = await (await fetch('/api/health', {cache:'no-store', headers:langHeaders()})).json();
+    // take the real limits from the backend (in case they changed via env variables)
+    if (h.max_file_mb)  MAX_FILE_MB  = h.max_file_mb;
+    if (h.max_items)    MAX_ITEMS    = h.max_items;
+    if (h.max_total_mb) MAX_TOTAL_MB = h.max_total_mb;
+    const used = Math.max(0, h.storage_mb || 0);
+    const pct  = Math.min(100, Math.round(used / MAX_TOTAL_MB * 100));
+    const free = Math.max(0, MAX_TOTAL_MB - used);
+    const m = $('meter');
+    m.className = 'meter' + (pct >= 90 ? ' full' : pct >= 70 ? ' warn' : '');
+    $('meterFill').style.width = pct + '%';
+    $('storageTxt').innerHTML = tb('admin.storage.text',
+      {free: fmtMB(free), total: fmtMB(MAX_TOTAL_MB), used: fmtMB(used), pct}, ['free']);
+    const up = $('usedPill');
+    up.textContent = t('admin.used', {used: fmtMB(used)});
+    up.className = 'pill' + (pct >= 90 ? ' bad' : pct >= 70 ? ' warn' : '');
+    if (h.version) $('ver').textContent = 'v' + h.version;
+  }catch{ /* health is only a supplement, we do not fail loudly */ }
+  try{
+    const dv = await (await fetch('/api/devices', {cache:'no-store', headers:langHeaders()})).json();
+    renderKioskChips(dv.devices && dv.devices[DEVICE]);
+    renderKioskUpdate(dv.devices && dv.devices[DEVICE], dv.kiosk_release);
+    renderKioskHealth(dv.devices && dv.devices[DEVICE]);
+  }catch{ /* the screen status is only a supplement, we do not fail loudly */ }
+}
+
+/**
+ * Feedback for one screen: is the kiosk running on it (so it starts by itself
+ * after a power outage), is the content in memory (survives a network cut) and
+ * does it play smoothly? The server sees none of this itself - the player
+ * reports it in the heartbeat.
+ */
+function renderKioskChips(d){
+  const box = $('kioskChips');
+  if (!box) return;
+  box.innerHTML = '';
+  const addChip = (text, cls, icon) => {
+    const s = document.createElement('span');
+    s.className = 'pill' + (cls ? ' ' + cls : '');
+    if (icon) s.innerHTML = ico(icon);
+    s.appendChild(document.createTextNode(text));
+    box.appendChild(s);
+  };
+  const mem = $('memState');
+  if (mem) {
+    mem.textContent = d && d.online && d.cached_items ? t('admin.status.mem', {v: d.cached_items}) : '';
+    const mp = d && d.online && d.cached_items ? d.cached_items.split('/').map(Number) : null;
+    mem.className = 'mem' + (mp && mp[0] < mp[1] ? ' warn' : '');
+  }
+  if (!d || !d.online) { addChip(t('admin.chips.silent'), 'bad'); return; }
+  addChip(d.kiosk ? t('admin.dev.kiosk', {v: d.kiosk})
+                   : t('admin.chips.browser'),
+          d.kiosk ? '' : 'warn', d.kiosk ? 'monitor' : 'globe');
+  if (d.cached_items) {
+    const [have, total] = d.cached_items.split('/').map(Number);
+    addChip(have >= total ? t('admin.chips.memAll', {v: d.cached_items})
+                          : t('admin.dev.memPart', {v: d.cached_items}),
+            have >= total ? '' : 'warn', have >= total ? 'storage' : 'download');
+  }
+  if (d.snapshots && d.snapshots.indexOf('/') > 0) {
+    const [dropped, total] = d.snapshots.split('/').map(Number);
+    const pct = total ? 100 * dropped / total : 0;
+    addChip(t('admin.chips.dropped', {pct: pct.toFixed(1)}), pct > 5 ? 'warn' : '', 'video');
+  }
+  if (d.stalls) addChip(t('admin.chips.stalls', {n: d.stalls}),
+                           d.stalls > 3 ? 'warn' : '', 'pause');
+  if (d.h264 === false) addChip(t('admin.dev.noH264'), 'bad', 'alert');
+  if (d.blank) addChip(t('admin.chips.blank'), 'bad', 'alert');
+  if (d.screen) addChip(d.screen.w + '×' + d.screen.h, '', 'monitor');
+}
+
+/**
+ * Controlled update of the kiosk app on the box. The box reports the version
+ * (kiosk_code) and state (kiosk_state) itself when it queries
+ * /api/kiosk/release; an update can be offered only where
+ * the version is known and the server has a newer one. The installation must
+ * be confirmed on the TV by a person (OK on the remote) - the admin only requests it.
+ */
+function kioskNewer(d, rel){
+  return !!(d && rel && Number.isInteger(d.kiosk_code) && rel.versionCode > d.kiosk_code);
+}
+const KUPD_STATE = {downloading: ['admin.kupd.downloading', ''], waiting: ['admin.kupd.waiting', 'warn'],
+                   declined: ['admin.kupd.declined', 'warn'], failed: ['admin.kupd.failed', 'bad'],
+                   no_permission: ['admin.kupd.noPerm', 'bad']};
+function renderKioskUpdate(d, rel){
+  const box = $('kioskUpdate');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!d) return;
+  const KUPD_ICON = {'admin.kupd.avail': 'arrowup', 'admin.kupd.pending': 'hourglass',
+    'admin.kupd.downloading': 'download', 'admin.kupd.waiting': 'hourglass',
+    'admin.kupd.declined': 'decline', 'admin.kupd.failed': 'alert', 'admin.kupd.noPerm': 'alert'};
+  const addChip = (key, cls, params) => {
+    const s = document.createElement('span');
+    s.className = 'pill' + (cls ? ' ' + cls : '');
+    if (KUPD_ICON[key]) s.innerHTML = ico(KUPD_ICON[key]);
+    s.appendChild(document.createTextNode(t(key, params)));
+    box.appendChild(s);
+  };
+  const addButton = (key, body, okKey, failKey) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn ghost'; b.textContent = t(key);
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await api('/api/screens/' + encodeURIComponent(DEVICE) + '/kiosk-update', body);
+        toast(t(okKey), 'ok');
+      } catch (err) { toast(failMsg(failKey, err), 'bad'); }
+      refreshHealth();
+    };
+    box.appendChild(b);
+  };
+  const st = KUPD_STATE[d.kiosk_state];
+  if (d.kiosk_update) {
+    // requested: until the box answers with downloading/waiting, we wait for its query (max. a minute)
+    if (st && (d.kiosk_state === 'downloading' || d.kiosk_state === 'waiting')) addChip(st[0], st[1]);
+    else addChip('admin.kupd.pending', '');
+    addButton('admin.kupd.cancel', {cancel: true}, 'admin.kupd.cancelled', 'admin.kupd.cancelFailed');
+    return;
+  }
+  if (!kioskNewer(d, rel)) return;
+  addChip('admin.kupd.avail', '', {v: rel.versionName});
+  // result of the last attempt (the box closed it without installing)
+  if (['declined', 'failed', 'no_permission'].includes(d.kiosk_state)) addChip(st[0], st[1]);
+  addButton('admin.kupd.btn', {}, 'admin.kupd.requested', 'admin.kupd.reqFailed');
+}
+
+/**
+ * Box health (reported by the kiosk in the same /api/kiosk/release query):
+ * free RAM, Wi-Fi signal, how long the box has been running, restarts and
+ * renderer crashes. An unobtrusive row; only what foreshadows a problem on
+ * the screen is shown as a warning.
+ */
+const KH_STALE_S = 5 * 60;      // do not show older reports (the kiosk stopped reporting)
+function wifiQuality(rssi){
+  return rssi >= -60 ? 'excellent' : rssi >= -70 ? 'good' : rssi >= -80 ? 'weak' : 'veryWeak';
+}
+function uptimeLabel(s){
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? t('admin.kh.d', {d, h}) : h ? t('admin.kh.h', {h, m}) : t('admin.kh.m', {m});
+}
+function renderKioskHealth(d){
+  const box = $('kioskHealth');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!d || !d.online || !Number.isInteger(d.kiosk_seen)
+      || Date.now() / 1000 - d.kiosk_seen > KH_STALE_S) return;
+  const parts = [];
+  const cast = (text, warn, title) => {
+    const s = document.createElement('span');
+    if (warn) s.className = 'warn';
+    if (title) s.title = title;
+    s.textContent = text;
+    parts.push(s);
+  };
+  if (Number.isInteger(d.kiosk_ram)) {
+    cast(t(d.kiosk_ram_low ? 'admin.kh.ramLow' : 'admin.kh.ram', {ram: d.kiosk_ram}),
+         d.kiosk_ram < 100 || d.kiosk_ram_low === true);
+  }
+  if (Number.isInteger(d.kiosk_rssi)) {
+    cast(t('admin.kh.wifi', {rssi: d.kiosk_rssi, q: t('admin.kh.q.' + wifiQuality(d.kiosk_rssi))}),
+         d.kiosk_rssi < -75);
+  } else if (d.kiosk_net === 'eth') {
+    cast(t('admin.kh.eth'), false);
+  }
+  if (Number.isInteger(d.kiosk_up)) {
+    cast(t('admin.kh.up', {uptime: uptimeLabel(d.kiosk_up)}), false);
+    cast(t('admin.kh.boots', {n: d.kiosk_boots || 0}), false, t('admin.kh.bootsHint'));
+  }
+  if (d.kiosk_crash > 0) cast(t('admin.kh.crash', {n: d.kiosk_crash}), true);
+  parts.forEach((s, i) => {
+    if (i) box.appendChild(document.createTextNode(' · '));
+    box.appendChild(s);
+  });
+}
+
+// Deleting with "Undo": the item is hidden at once, the real /api/delete goes to the server only after
+// DEL_UNDO_MS (the server has no "restore", so simply nothing is sent while the step can be undone).
+const DEL_UNDO_MS = 6000;
+const pendingDel = new Map();   // file -> timer
+async function commitDelete(f){
+  if (!pendingDel.has(f)) return;
+  clearTimeout(pendingDel.get(f)); pendingDel.delete(f);
+  try { await api('/api/delete', {device:DEVICE, file:f}); if (!pendingDel.size) toast(t('admin.del.done'), 'ok'); }
+  catch (err) { toast(failMsg('admin.del.failed', err), 'bad'); }
+  await load();
+  refreshHealth();
+}
+function softDelete(f){
+  for (const other of [...pendingDel.keys()]) commitDelete(other);   // finish the previous delete right away
+  pendingDel.set(f, setTimeout(() => commitDelete(f), DEL_UNDO_MS));
+  itemsCache = itemsCache.filter(x => x.file !== f);
+  setLoadState(loadState);
+  render();
+  toast(t('admin.del.pending', {name: niceName(f)}), 'ok', {ms: DEL_UNDO_MS, action: {label: t('admin.del.undo'), fn: () => {
+    if (!pendingDel.has(f)) return;
+    clearTimeout(pendingDel.get(f)); pendingDel.delete(f);
+    load().then(() => toast(t('admin.del.restored'), 'ok'));
+  }}});
+}
+// page closed/switched during the countdown: finish the delete (the user wanted it)
+window.addEventListener('pagehide', () => {
+  pendingDel.forEach((tm, f) => {
+    try { fetch('/api/delete', {method:'POST', keepalive:true, headers:langHeaders({'Content-Type':'application/json'}),
+                                body: JSON.stringify({device:DEVICE, file:f})}); } catch (e) { /* nothing */ }
+  });
+});
+
+let loadState = 'loading';   // loading | error | ok
+function setLoadState(st){
+  loadState = st;
+  const err = $('loadErr'); if (err) err.style.display = (st === 'error' && !itemsCache.length) ? 'flex' : 'none';
+}
+async function load() {
+  if (uploading) return;                         // do not disturb a running upload
+  const af = document.activeElement;
+  if (af && af.matches && af.matches('input[data-sec],input[data-from],input[data-until],input[data-planfrom],input[data-planto]')) return;
+  try {
+    const r = await fetch(`/api/tv/${encodeURIComponent(DEVICE)}/playlist`, {cache:'no-store', headers:langHeaders()});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    itemsCache = d.items.filter(it => !pendingDel.has(decodeURIComponent(it.url.replace('/media/','')))).map(it => ({
+      file: decodeURIComponent(it.url.replace('/media/','')),
+      url: it.url, type: it.type, seconds: it.seconds, sound: !!it.sound,
+      enabled: it.enabled !== false, from: it.from || '', until: it.until || '',
+      schedule: (it.schedule && typeof it.schedule === 'object') ? it.schedule : null
+    }));
+    settings = d.settings || {};
+    setLoadState('ok');
+    applySettingsUI();
+    render();
+    msg('msgList', '');
+  } catch(e) {
+    setLoadState('error');
+    render();
+    msg('msgList', t('admin.server.down'), 'bad');
+  }
+}
+
+// after the grid is rebuilt, return focus to the same element (or the nearest)
+const FOCUS_SEL = [['data-mv', 'mv'], ['data-snd', 'snd'], ['data-vis', 'vis'], ['data-del', 'del'],
+                   ['data-sec', 'sec'], ['data-from', 'from'], ['data-until', 'until'],
+                   ['data-planbtn', 'planbtn'], ['data-planday', 'planday'], ['data-planfrom', 'planfrom'],
+                   ['data-planto', 'planto'], ['data-plansave', 'plansave'], ['data-planclear', 'planclear']];
+function focusSnapshot(){
+  const g = $('grid'), a = document.activeElement;
+  if (!a || !g.contains(a)) return null;
+  const tile = a.closest('.tile'); if (!tile) return null;
+  for (const [attr] of FOCUS_SEL) if (a.hasAttribute(attr)) {
+    return {attr, val: a.getAttribute(attr), file: tile.dataset.file,
+            idx: [...g.children].indexOf(tile), dir: a.getAttribute('data-mv')};
+  }
+  return null;
+}
+function restoreFocus(snap){
+  if (!snap) return;
+  const g = $('grid');
+  const tile = [...g.children].find(c => c.dataset.file === snap.file);
+  let el = null;
+  if (tile) {
+    const cand = [...tile.querySelectorAll('[' + snap.attr + ']')];
+    el = cand.find(x => !x.disabled && snap.attr === 'data-planday' && x.getAttribute(snap.attr) === snap.val)
+      || cand.find(x => !x.disabled && (snap.attr !== 'data-mv' || x.dataset.mv === snap.dir))
+      || tile.querySelector('[data-mv]:not([disabled])') || tile.querySelector('[data-vis]');
+  } else {
+    // the item vanished (deleted) -> same position, or the last one; otherwise the upload zone
+    const t2 = g.children[Math.min(snap.idx, g.children.length - 1)];
+    el = t2 ? t2.querySelector('[data-vis]') : $('drop');
+  }
+  if (el) el.focus({preventScroll: true});
+}
+
+// schedule:begin
+// Pure schedule logic (no DOM, no t()): label, building the object, validation.
+const PLAN_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+function planDays(days){
+  const out = [];
+  (Array.isArray(days) ? days : []).forEach(d => {
+    const n = Number(d);
+    if (Number.isInteger(n) && n >= 0 && n <= 6 && !out.includes(n)) out.push(n);
+  });
+  return out.sort((a, b) => a - b);
+}
+// days -> "Mon–Fri", "Mon, Wed", "Mon–Wed, Fri–Sun"; 3+ consecutive days form a range, a pair is listed with a comma
+function formatPlanDays(days, names){
+  const ds = planDays(days), parts = [];
+  let i = 0;
+  while (i < ds.length) {
+    let j = i;
+    while (j + 1 < ds.length && ds[j + 1] === ds[j] + 1) j++;
+    if (j - i >= 2) parts.push(names[ds[i]] + '–' + names[ds[j]]);
+    else for (let k = i; k <= j; k++) parts.push(names[ds[k]]);
+    i = j + 1;
+  }
+  return parts.join(', ');
+}
+// brief label; empty or all 7 days = everyDay ("every day")
+function formatSchedule(sch, names, everyDay){
+  if (!sch) return '';
+  const ds = planDays(sch.days);
+  const dayPart = (ds.length === 0 || ds.length === 7) ? everyDay : formatPlanDays(ds, names);
+  const time = (sch.from && sch.to) ? sch.from + '–' + sch.to : '';
+  return time ? dayPart + ' ' + time : dayPart;
+}
+function normPlanTime(v){
+  const m = /^(\d{2}:\d{2})(:\d{2})?$/.exec(String(v == null ? '' : v).trim());
+  return m ? m[1] : '';
+}
+// returns {schedule} or {error: 'times'|'same'}; with no days selected the `days` key is omitted (every day)
+function buildSchedule(days, from, to){
+  const f = normPlanTime(from), tt = normPlanTime(to);
+  if (!PLAN_TIME_RE.test(f) || !PLAN_TIME_RE.test(tt)) return {error: 'times'};
+  if (f === tt) return {error: 'same'};
+  const ds = planDays(days);
+  return {schedule: ds.length ? {days: ds, from: f, to: tt} : {from: f, to: tt}};
+}
+// schedule:end
+
+// ---------- schedule UI ----------
+const PLAN_DAY_KEYS = ['admin.plan.d0','admin.plan.d1','admin.plan.d2','admin.plan.d3','admin.plan.d4','admin.plan.d5','admin.plan.d6'];
+const planOpen = new Set();      // files with an open panel
+const planSecOpen = new Set();   // files with the "Scheduling" row expanded (survives render())
+// validity From–Until (YYYY-MM-DD) -> short badge "1. 5.–31. 5." / "from ..." / "until ..."
+function validLabel(from, until){
+  const fmt = v => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(dateLocale(), {day: 'numeric', month: 'numeric'}) : (v || ''); };
+  if (from && until) return fmt(from) + '–' + fmt(until);
+  if (from) return t('admin.plan.validFrom', {d: fmt(from)});
+  if (until) return t('admin.plan.validUntil', {d: fmt(until)});
+  return '';
+}
+const planDraft = {};            // file -> {days:[], from, to} (survives render())
+function planLabel(sch){
+  return formatSchedule(sch, PLAN_DAY_KEYS.map(k => t(k)), t('admin.plan.everyDay'));
+}
+function planDraftFor(it){
+  if (!planDraft[it.file]) {
+    const s = it.schedule || {};
+    planDraft[it.file] = {days: planDays(s.days), from: s.from || '', to: s.to || '', err: ''};
+  }
+  return planDraft[it.file];
+}
+function planPanelHtml(it){
+  const d = planDraftFor(it), f = esc(it.file);
+  const days = PLAN_DAY_KEYS.map((k, i) =>
+    `<button type="button" class="planday" data-planday="${i}" aria-pressed="${d.days.includes(i) ? 'true' : 'false'}">${esc(t(k))}</button>`).join('');
+  return `<div class="planpanel" data-planpanel="${f}">
+    <div class="plandays" role="group" aria-label="${esc(t('admin.plan.days'))}">${days}</div>
+    <div class="plantimes">
+      <label>${esc(t('admin.plan.from'))} <input type="time" value="${esc(d.from)}" data-planfrom="${f}"></label>
+      <label>${esc(t('admin.plan.to'))} <input type="time" value="${esc(d.to)}" data-planto="${f}"></label>
+    </div>
+    <div class="planhint">${esc(t('admin.plan.hint'))}</div>
+    <div class="planerr" role="alert">${esc(d.err ? t(d.err) : '')}</div>
+    <div class="planbtns">
+      <button type="button" class="plan-save" data-plansave="${f}">${esc(t('admin.plan.save'))}</button>
+      <button type="button" class="plan-clear" data-planclear="${f}">${esc(t('admin.plan.clear'))}</button>
+    </div>
+  </div>`;
+}
+async function planSubmit(file, schedule){
+  const it = itemsCache.find(x => x.file === file);
+  try {
+    await api('/api/item', {device: DEVICE, file, schedule});
+    if (it) it.schedule = schedule;
+    planOpen.delete(file); delete planDraft[file];
+    render();
+    const b = [...$('grid').querySelectorAll('[data-planbtn]')].find(x => x.dataset.planbtn === file);
+    if (b) b.focus({preventScroll: true});
+    flashTile(file);
+    toast(t(schedule ? 'admin.plan.saved' : 'admin.plan.cleared'), 'ok');
+  } catch (err) { toast(failMsg('admin.plan.failed', err), 'bad'); }
+}
+
+function render() {
+  const snap = focusSnapshot();
+  const g = $('grid'); g.innerHTML = '';
+  $('empty').style.display = (loadState === 'ok' && !itemsCache.length) ? 'flex' : 'none';
+
+  const cnt = $('cntPill');
+  cnt.textContent = t('admin.count', {n: itemsCache.length, max: MAX_ITEMS});
+  cnt.className = 'pill' + (itemsCache.length >= MAX_ITEMS ? ' bad'
+                          : itemsCache.length >= MAX_ITEMS*0.8 ? ' warn' : '');
+
+  const last = itemsCache.length - 1;
+  itemsCache.forEach((it, n) => {
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (it.enabled ? '' : ' off');
+    tile.dataset.file = it.file;
+    const isVid = it.type === 'video';
+    const orig = isVid
+      ? `<video class="thumb" src="${esc(it.url)}#t=0.5" muted preload="metadata"></video>`
+      : `<img class="thumb" src="${esc(it.url)}" alt="">`;
+    // preview from the server; when it is not available (404, ffmpeg missing), it falls back to the original
+    const thumb = `<img class="thumb" loading="lazy" src="/api/thumb/${encodeURIComponent(it.file)}" alt="">`;
+    const badge = ico(isVid ? 'video' : 'photo') + esc(t(isVid ? 'admin.tile.video' : 'admin.tile.photo'));
+    const vl = validLabel(it.from, it.until);
+    tile.innerHTML = `
+      <div class="thumbwrap">
+        ${thumb}
+        <span class="badge">${badge}</span>
+        <span class="idx">#${n+1}</span>
+      </div>
+      <div class="meta">
+        <div class="name" title="${esc(niceName(it.file))}">${esc(niceName(it.file))}</div>
+        <div class="row">
+          <button class="mv" data-mv="up" data-f="${esc(it.file)}" ${n===0?'disabled':''} aria-label="${esc(t('admin.tile.up'))}">↑</button>
+          <button class="mv" data-mv="down" data-f="${esc(it.file)}" ${n===last?'disabled':''} aria-label="${esc(t('admin.tile.down'))}">↓</button>
+          <input type="number" min="2" max="600" value="${esc(it.seconds)}" data-sec="${esc(it.file)}" aria-label="${esc(t('admin.tile.secAria'))}">
+          <span class="unit">${esc(t('admin.tile.unit'))}</span>
+        </div>
+        ${isVid ? `<button class="snd ${it.sound?'on':''}" aria-pressed="${it.sound?'true':'false'}" data-snd="${esc(it.file)}" data-on="${it.sound?1:0}">${sndLabel(it.sound)}</button>` : ''}
+        <div class="acts">
+          <button class="vis ${it.enabled?'on':''}" aria-pressed="${it.enabled?'true':'false'}" data-vis="${esc(it.file)}" data-on="${it.enabled?1:0}">${visLabel(it.enabled)}</button>
+          <button class="del" data-del="${esc(it.file)}">${esc(t('admin.tile.del'))}</button>
+        </div>
+        <details class="plan" data-plansec="${esc(it.file)}"${planSecOpen.has(it.file) || planOpen.has(it.file) ? ' open' : ''}>
+          <summary><span class="plansum-t">${ico('clock')}${esc(t('admin.plan.title'))}</span>${it.schedule ? `<span class="planbadge" data-planbadge="${esc(it.file)}">${esc(planLabel(it.schedule))}</span>` : ''}${vl ? `<span class="validbadge">${esc(vl)}</span>` : ''}</summary>
+          <div class="plancont">
+            <div class="sched">
+              <label>${esc(t('admin.tile.from'))} <input type="date" value="${esc(it.from)}" data-from="${esc(it.file)}"></label>
+              <label>${esc(t('admin.tile.until'))} <input type="date" value="${esc(it.until)}" data-until="${esc(it.file)}"></label>
+              <button type="button" class="plan-btn${it.schedule ? ' on' : ''}" data-planbtn="${esc(it.file)}" aria-expanded="${planOpen.has(it.file) ? 'true' : 'false'}" aria-label="${esc(t('admin.plan.btnAria'))}">${ico('clock')}${esc(t('admin.plan.btn'))}</button>
+            </div>
+            ${planOpen.has(it.file) ? planPanelHtml(it) : ''}
+          </div>
+        </details>
+      </div>`;
+    const pd = tile.querySelector('details.plan');
+    pd.addEventListener('toggle', () => { if (pd.open) planSecOpen.add(it.file); else planSecOpen.delete(it.file); });
+    const th = tile.querySelector('img.thumb');
+    th.addEventListener('error', () => {
+      const w = document.createElement('div');
+      w.innerHTML = orig;
+      th.replaceWith(w.firstElementChild);
+    }, {once: true});
+    g.appendChild(tile);
+  });
+  restoreFocus(snap);
+}
+
+// the 16-hex prefix `<hex>_` is only technical noise from file storage
+function niceName(file){ return String(file || '').replace(/^[0-9a-f]{16}_/, ''); }
+
+function flashTile(file){
+  const el = [...$('grid').children].find(c => c.dataset.file === file);
+  if (el){ el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'), 750); }
+}
+
+$('grid').addEventListener('click', async (ev) => {
+  const pb = ev.target.closest('[data-planbtn]');
+  const pd = ev.target.closest('[data-planday]');
+  const ps = ev.target.closest('[data-plansave]');
+  const pc = ev.target.closest('[data-planclear]');
+  if (pb) {
+    const f = pb.dataset.planbtn;
+    if (planOpen.has(f)) { planOpen.delete(f); delete planDraft[f]; } else planOpen.add(f);
+    render();
+    const b = [...$('grid').querySelectorAll('[data-planbtn]')].find(x => x.dataset.planbtn === f);
+    if (b) b.focus({preventScroll: true});
+    return;
+  }
+  if (pd) {
+    const tile = pd.closest('.tile'), it = itemsCache.find(x => x.file === tile.dataset.file);
+    if (!it) return;
+    const dr = planDraftFor(it), n = Number(pd.dataset.planday);
+    dr.days = dr.days.includes(n) ? dr.days.filter(x => x !== n) : planDays(dr.days.concat(n));
+    pd.setAttribute('aria-pressed', dr.days.includes(n) ? 'true' : 'false');
+    return;
+  }
+  if (ps) {
+    const f = ps.dataset.plansave, it = itemsCache.find(x => x.file === f);
+    if (!it) return;
+    const dr = planDraftFor(it);
+    const r = buildSchedule(dr.days, dr.from, dr.to);
+    const errEl = ps.closest('.planpanel').querySelector('.planerr');
+    if (r.error) {
+      dr.err = r.error === 'same' ? 'admin.plan.errSame' : 'admin.plan.errTimes';
+      errEl.textContent = t(dr.err);
+      return;
+    }
+    dr.err = ''; errEl.textContent = '';
+    await planSubmit(f, r.schedule);
+    return;
+  }
+  if (pc) {
+    const f = pc.dataset.planclear, it = itemsCache.find(x => x.file === f);
+    if (it && !it.schedule) { planOpen.delete(f); delete planDraft[f]; render(); return; }
+    await planSubmit(f, null);
+    return;
+  }
+  const del = ev.target.closest('[data-del]');
+  const mv = ev.target.closest('[data-mv]');
+  const snd = ev.target.closest('[data-snd]');
+  const vis = ev.target.closest('[data-vis]');
+  if (snd) {
+    const f = snd.dataset.snd;
+    const on = snd.dataset.on === '1' ? 0 : 1;   // toggle
+    snd.dataset.on = String(on);
+    snd.className = 'snd' + (on ? ' on' : '');
+    snd.setAttribute('aria-pressed', on ? 'true' : 'false');
+    snd.innerHTML = sndLabel(on);
+    try {
+      await api('/api/item', {device:DEVICE, file:f, sound: !!on});
+      flashTile(f);
+      toast(t(on ? 'admin.sound.on' : 'admin.sound.off'), 'ok');
+    } catch (err) { toast(failMsg('admin.sound.failed', err), 'bad'); load(); }
+    return;
+  }
+  if (vis) {
+    const f = vis.dataset.vis;
+    const on = vis.dataset.on === '1' ? 0 : 1;   // toggle visibility
+    vis.dataset.on = String(on);
+    vis.className = 'vis' + (on ? ' on' : '');
+    vis.setAttribute('aria-pressed', on ? 'true' : 'false');
+    vis.innerHTML = visLabel(on);
+    vis.closest('.tile').classList.toggle('off', !on);
+    try {
+      await api('/api/item', {device:DEVICE, file:f, enabled: !!on});
+      toast(t(on ? 'admin.vis.on' : 'admin.vis.off'), 'ok');
+    } catch (err) { toast(failMsg('admin.vis.failed', err), 'bad'); load(); }
+    return;
+  }
+  if (del) {
+    softDelete(del.dataset.del);
+  } else if (mv) {
+    if (mv.disabled) return;
+    const f = mv.dataset.f, dir = mv.dataset.mv;
+    const i = itemsCache.findIndex(x => x.file === f);
+    const j = dir === 'up' ? i-1 : i+1;
+    if (j < 0 || j >= itemsCache.length) return;
+    [itemsCache[i], itemsCache[j]] = [itemsCache[j], itemsCache[i]];
+    render();
+    flashTile(f);
+    try {
+      await api('/api/order', {device:DEVICE, order: itemsCache.map(x=>x.file)});
+      toast(t('admin.order.saved'), 'ok');
+    } catch (err) { toast(failMsg('admin.order.failed', err), 'bad'); load(); }
+  }
+});
+
+$('grid').addEventListener('input', (ev) => {
+  const el = ev.target.closest('[data-planfrom],[data-planto]');
+  if (!el) return;
+  const it = itemsCache.find(x => x.file === el.closest('.tile').dataset.file);
+  if (!it) return;
+  const dr = planDraftFor(it);
+  if (el.hasAttribute('data-planfrom')) dr.from = el.value; else dr.to = el.value;
+});
+
+$('grid').addEventListener('change', async (ev) => {
+  const sec = ev.target.closest('[data-sec]');
+  const from = ev.target.closest('[data-from]');
+  const until = ev.target.closest('[data-until]');
+  if (sec) {
+    let v = parseInt(sec.value, 10);
+    if (!Number.isFinite(v) || v < 2) v = 2;
+    if (v > 600) v = 600;
+    sec.value = v;
+    try {
+      await api('/api/item', {device:DEVICE, file:sec.dataset.sec, seconds: v});
+      flashTile(sec.dataset.sec);
+      toast(t('admin.sec.saved', {n: v}), 'ok');
+    } catch (err) { toast(failMsg('admin.sec.failed', err), 'bad'); }
+    return;
+  }
+  if (from || until) {
+    const el = from || until;
+    const key = from ? 'from' : 'until';
+    const f = el.dataset[key];
+    try {
+      await api('/api/item', {device:DEVICE, file:f, [key]: el.value});
+      flashTile(f);
+      toast(t('admin.sched.saved'), 'ok');
+    } catch (err) { toast(failMsg('admin.sched.failed', err), 'bad'); }
+  }
+});
+
+/* ---------- upload with progress per file (XHR) ---------- */
+function clientValidate(f){
+  const e = extOf(f.name);
+  if (!ALL_EXT.includes(e))
+    return t('admin.up.unsupported', {ext: e||'?', allowed: ALL_EXT.join(', ')});
+  if (f.size === 0) return t('admin.up.empty');
+  if (f.size > MAX_FILE_MB*1024*1024)
+    return t('admin.up.tooBig', {size: fmtSize(f.size), max: MAX_FILE_MB});
+  return null;
+}
+
+function makeRow(f){
+  const isVid = VID_EXT.includes(extOf(f.name));
+  const el = document.createElement('div');
+  el.className = 'up';
+  el.innerHTML = `
+    <div class="up-head">
+      <span class="up-ico">${ico(isVid ? 'video' : 'photo', true)}</span>
+      <span class="up-name" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="up-state">${esc(t('admin.up.waiting'))}</span>
+    </div>
+    <div class="bar"><i></i></div>
+    <div class="up-why"></div>`;
+  $('uplist').appendChild(el);
+  return { el, bar: el.querySelector('.bar>i'), state: el.querySelector('.up-state'), why: el.querySelector('.up-why') };
+}
+function rowDone(row, name, warnings, fixes){
+  row.el.classList.add('done'); row.bar.style.width='100%';
+  if (warnings && warnings.length){
+    // the file is saved, something is just off about it - a different color than an error
+    row.el.classList.add('warn');
+    row.state.textContent=t('admin.up.warned'); row.state.className='up-state warn';
+    row.why.textContent = warnings.concat(fixes || []).join('; ');
+  } else if (fixes && fixes.length){
+    // the server fixed the file itself - not an error or a warning, but the
+    // user must know that something different from what they uploaded sits on disk
+    row.el.classList.add('info');
+    row.state.textContent=t('admin.up.fixed'); row.state.className='up-state info';
+    row.why.textContent = fixes.join('; ');
+  } else {
+    row.state.textContent=t('admin.up.done'); row.state.className='up-state ok';
+  }
+}
+function rowError(row, reason){
+  row.el.classList.add('err');
+  row.state.textContent=t('admin.up.error'); row.state.className='up-state bad';
+  row.why.textContent = reason;
+}
+
+// idem:begin
+// The Idempotency-Key ([A-Za-z0-9_.:-]{1,128}) is one per file; a retry of the same file reuses it.
+function makeUploadKey(){
+  let id = '';
+  try { if (typeof crypto !== 'undefined' && crypto.randomUUID) id = crypto.randomUUID(); } catch {}
+  if (!id) id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
+  return ('up-' + id).slice(0, 128);
+}
+function uploadKeyFor(job){ return job.idemKey || (job.idemKey = makeUploadKey()); }
+// idem:end
+
+function uploadOne(job){
+  return new Promise(res => {
+    const { file, row } = job;
+    const fd = new FormData();
+    fd.append('f0', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/upload?device=${encodeURIComponent(DEVICE)}`);
+    xhr.setRequestHeader('Accept-Language', LANG);
+    xhr.setRequestHeader('Idempotency-Key', uploadKeyFor(job));
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable){
+        const p = Math.round(e.loaded / e.total * 100);
+        row.bar.style.width = p + '%';
+        row.state.textContent = t('admin.up.progress', {p});
+      }
+    };
+    xhr.onload = () => {
+      let v = {};
+      try { v = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 200 && xhr.status < 300 && v.saved && v.saved.length){
+        // the server returns "name.mp4: text" - the name is already in the row, so we cut it off
+        const warnings = (v.warnings || []).map(w => w.replace(/^[^:]+:\s*/, ''));
+        const fixes = (v.fixes || []).map(w => w.replace(/^[^:]+:\s*/, ''));
+        rowDone(row, v.saved[0], warnings, fixes);
+      } else {
+        const reason = xhr.status === 409 ? t('admin.up.inProgress')
+                     : (v.errors && v.errors.length) ? v.errors.join('; ')
+                     : t('admin.up.rejected', {status: xhr.status});
+        rowError(row, reason);
+      }
+      res();
+    };
+    xhr.onerror = () => { rowError(row, t('admin.up.failed')); res(); };
+    row.state.textContent = t('admin.up.starting');
+    row.bar.style.width = '0%';
+    xhr.send(fd);
+  });
+}
+
+async function runQueue(){
+  if (queueActive) return;
+  queueActive = true; uploading = true;
+  let okCount = 0, errCount = 0;
+  while (uploadQueue.length){
+    const job = uploadQueue.shift();
+    if (job.err){ rowError(job.row, job.err); errCount++; continue; }
+    await uploadOne(job);
+    if (job.row.el.classList.contains('err')) errCount++; else okCount++;
+    refreshHealth();
+  }
+  queueActive = false; uploading = false;
+  const plural = (base, n) => t(base + (n === 1 ? '.one' : (LANG === 'cs' && n < 5 ? '.few' : '.many')), {n});
+  if (okCount)  toast(plural('admin.up.added', okCount), 'ok');
+  if (errCount && !okCount) toast(plural('admin.up.notAdded', errCount), 'bad');
+  await load();
+  refreshHealth();
+}
+
+function enqueueUploads(fileList){
+  const files = [...(fileList||[])];
+  if (!files.length) return;
+  if (!queueActive) $('uplist').innerHTML = '';   // clean up after the previous batch
+  files.forEach(f => {
+    const row = makeRow(f);
+    uploadQueue.push({ file: f, row, err: clientValidate(f) });
+  });
+  runQueue();
+}
+
+$('drop').onclick = () => $('file').click();
+$('drop').addEventListener('keydown', e => {
+  if (e.target !== e.currentTarget) return;
+  if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); $('file').click(); }
+});
+$('loadRetry').addEventListener('click', () => { setLoadState('loading'); msg('msgList', ''); load(); });
+$('file').onchange = (e) => { enqueueUploads(e.target.files); e.target.value=''; };
+['dragenter','dragover'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.add('hover');}));
+['dragleave','drop'].forEach(ev=>$('drop').addEventListener(ev,e=>{e.preventDefault();$('drop').classList.remove('hover');}));
+$('drop').addEventListener('drop', e=>enqueueUploads(e.dataTransfer.files));
+
+load();
+refreshHealth();
+loadDevices();
+loadAvailability();
+applyPairUI();
+setInterval(() => { load(); refreshHealth(); }, 8000);
+setInterval(() => { loadDevices(); loadAvailability(); }, 60000);
+</script>
+</body>
+</html>

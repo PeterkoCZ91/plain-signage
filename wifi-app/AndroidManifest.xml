@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Signage Wi-Fi helper — adds/removes a saved Wi-Fi network on the box via ADB.
+
+  Why separate and not part of the kiosk: the ADB shell on Android 9/10 may not
+  add Wi-Fi ("Uid 2000 does not have access to wifi commands"; `cmd wifi
+  add-network` exists only from Android 11) and WifiManager.addNetwork on
+  Android 10 works only for an app that targets API 28 or lower. The kiosk
+  targets 29, hence this mini app.
+
+  The activity is exported (otherwise `am start` from the shell cannot start it),
+  but protected by the WRITE_SECURE_SETTINGS permission: the shell has it, an
+  ordinary app cannot get it — so networks can be added only by someone with
+  ADB, not by another application on the box.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="app.plainsignage.wifi"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+  <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="28" />
+
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+  <!-- Android 10 returns the list of saved networks only with location (grant via ADB) -->
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+  <uses-feature android:name="android.software.leanback" android:required="false" />
+  <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+  <application
+      android:label="Signage Wi-Fi"
+      android:allowBackup="false">
+    <activity
+        android:name=".Wifi"
+        android:exported="true"
+        android:permission="android.permission.WRITE_SECURE_SETTINGS"
+        android:excludeFromRecents="true"
+        android:noHistory="true"
+        android:theme="@android:style/Theme.NoDisplay" />
+  </application>
+</manifest>

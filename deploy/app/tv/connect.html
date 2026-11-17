@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="cs"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title data-i18n="connect.title">Připojení TV</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#08080a;color:#f5f0e4;font-family:system-ui,sans-serif}main{min-height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:5vmin}.card{max-width:720px}.eyebrow{color:#c9a24d;letter-spacing:.18em;text-transform:uppercase;font-size:clamp(13px,1.8vw,22px)}h1{font-size:clamp(34px,6vw,76px);margin:16px 0}.code{font:700 clamp(54px,13vw,160px)/1 ui-monospace,monospace;letter-spacing:.12em;color:#e3c47c;margin:24px 0}.hint{font-size:clamp(18px,2.6vw,32px);color:#c9c0ad}.qr{display:none;background:#f5f0e4;border-radius:18px;padding:12px;margin:28px auto 0;width:min(34vmin,260px)}.qr img{width:100%;display:block}.small{margin-top:16px;color:#8f8a80;font-size:15px}@media (orientation:landscape){.card{max-width:none;display:grid;grid-template-columns:auto auto;grid-column-gap:6vw;align-items:center;text-align:left}.card>*{grid-column:1}.card>.qr{grid-column:2;grid-row:1/span 5;margin:0;width:min(62vh,440px)}.qr img{image-rendering:pixelated}h1{font-size:clamp(28px,8vh,72px)}.code{font-size:clamp(48px,17vh,150px);margin:3vh 0}.hint{font-size:clamp(16px,4vh,30px)}}.lang{position:fixed;top:12px;right:12px;display:flex;gap:6px}.lang button{background:#1a1a1e;color:#c9c0ad;border:1px solid #3a3a40;border-radius:8px;padding:8px 12px;font:600 14px system-ui,sans-serif;cursor:pointer;min-height:40px}.lang button.on{background:#e3c47c;color:#08080a;border-color:#e3c47c}
+</style><div class="lang" role="group" data-i18n-attr="aria-label:connect.lang.label" aria-label="Jazyk"><button type="button" data-lang="cs">CS</button><button type="button" data-lang="en">EN</button></div><main><div class="card"><div class="eyebrow" data-i18n="connect.eyebrow">Nastavení TV</div><h1 data-i18n="connect.heading">Připoj tuto TV v administraci</h1><div id="code" class="code">······</div><div class="hint" data-i18n="connect.hint">Naskenuj QR kód nebo v administraci zadej tento kód.</div><div id="qr" class="qr"><img id="qrimg" alt="QR kód" data-i18n-attr="alt:connect.qr.alt"></div><div id="msg" class="small" data-i18n="connect.msg.creating">Vytvářím bezpečný kód…</div></div></main><script>
+const I18N = {
+  cs: {
+    "connect.title": "Připojení TV",
+    "connect.eyebrow": "Nastavení TV",
+    "connect.heading": "Připoj tuto TV v administraci",
+    "connect.hint": "Naskenuj QR kód nebo v administraci zadej tento kód.",
+    "connect.qr.alt": "QR kód",
+    "connect.msg.creating": "Vytvářím bezpečný kód…",
+    "connect.msg.failed": "Kód se nepodařilo vytvořit. Zkus to znovu.",
+    "connect.msg.expires": "Kód platí {n} min.",
+    "connect.lang.label": "Jazyk"
+  },
+  en: {
+    "connect.title": "Connect a TV",
+    "connect.eyebrow": "TV setup",
+    "connect.heading": "Connect this TV in the admin panel",
+    "connect.hint": "Scan the QR code or enter this code in the admin panel.",
+    "connect.qr.alt": "QR code",
+    "connect.msg.creating": "Creating a secure code…",
+    "connect.msg.failed": "Couldn't create the code. Please try again.",
+    "connect.msg.expires": "The code is valid for {n} min.",
+    "connect.lang.label": "Language"
+  }
+};
+
+const I18N_KEY = 'signageLang';
+function pickLang(query, stored, nav){
+  const norm = v => { v = String(v == null ? '' : v).toLowerCase(); return v === 'en' || v.indexOf('en-') === 0 || v.indexOf('en_') === 0 ? 'en' : v === 'cs' || v.indexOf('cs-') === 0 ? 'cs' : null; };
+  return norm(query) || norm(stored) || (String(nav || '').toLowerCase().indexOf('en') === 0 ? 'en' : 'cs');
+}
+function readLang(){
+  let q = null, s = null;
+  try { q = new URLSearchParams(location.search).get('lang'); } catch (e) {}
+  try { s = localStorage.getItem(I18N_KEY); } catch (e) {}
+  return pickLang(q, s, typeof navigator !== 'undefined' ? navigator.language : '');
+}
+let LANG = readLang();
+function t(key, params){
+  let s = (I18N[LANG] || {})[key];
+  if (s == null) s = I18N.cs[key];
+  if (s == null) s = key;
+  return params ? s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m)) : s;
+}
+function dateLocale(){ return LANG === 'en' ? 'en-GB' : 'cs-CZ'; }
+function setLang(l){
+  if (l !== 'cs' && l !== 'en') return;
+  LANG = l;
+  try { localStorage.setItem(I18N_KEY, l); } catch (e) {}
+}
+function applyI18n(){
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(e => { e.textContent = t(e.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-attr]').forEach(e => {
+    e.getAttribute('data-i18n-attr').split(';').forEach(p => {
+      const i = p.indexOf(':');
+      if (i > 0) e.setAttribute(p.slice(0, i).trim(), t(p.slice(i + 1).trim()));
+    });
+  });
+  document.querySelectorAll('[data-lang]').forEach(b => {
+    const on = b.getAttribute('data-lang') === LANG;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+</script><script>
+(function(){var key="signagePairClient";var client=localStorage.getItem(key);if(!client){client="p"+Date.now().toString(36)+Math.random().toString(36).slice(2);localStorage.setItem(key,client)}var code=document.getElementById("code"),msg=document.getElementById("msg"),qr=document.getElementById("qr"),img=document.getElementById("qrimg");
+var cur=["connect.msg.creating",null,false];
+function setMsg(k,p,raw){cur=[k,p,!!raw];msg.textContent=raw?k:t(k,p)}
+applyI18n();
+document.querySelectorAll("[data-lang]").forEach(function(b){b.addEventListener("click",function(){setLang(b.getAttribute("data-lang"));applyI18n();if(cur[2])msg.textContent=cur[0];else msg.textContent=t(cur[0],cur[1])})});
+function req(method,url,data,ok){var x=new XMLHttpRequest();x.open(method,url,true);x.setRequestHeader("Content-Type","application/json");x.setRequestHeader("Accept-Language",LANG);x.onload=function(){if(x.status>=200&&x.status<300)ok(JSON.parse(x.responseText));else{var e=null;try{e=JSON.parse(x.responseText).error}catch(_){}if(e)setMsg(String(e),null,true);else setMsg("connect.msg.failed")}};x.send(data?JSON.stringify(data):null)}function status(){req("GET","/api/pair/status?client="+encodeURIComponent(client),null,function(d){if(d.status==="paired"){location.replace("/tv/"+encodeURIComponent(d.device));return}setTimeout(status,3000)})}req("POST","/api/pair/request",{client:client},function(d){code.textContent=d.code;img.src="/pair-qr.png?code="+encodeURIComponent(d.code);qr.style.display="block";setMsg("connect.msg.expires",{n:Math.ceil(d.expires_in/60)});status()})})();
+</script>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Czech (device locale cs). The default for other languages is English in values/. -->
+<resources>
+  <string name="toast_back_again">Ještě jednou zpět = odchod z kiosku</string>
+  <string name="chooser_open_app">Otevřít aplikaci</string>
+  <string name="toast_no_launcher">Nepodařilo se otevřít spouštěč ani nastavení</string>
+  <string name="diag_title">KIOSEK</string>
+  <string name="diag_screen">"obrazovka:  %1$s"</string>
+  <string name="diag_autostart">"autostart:  %1$s"</string>
+  <string name="diag_autostart_on">aktivní (aplikace je spouštěč)</string>
+  <string name="diag_autostart_off">NEAKTIVNÍ — po výpadku proudu obraz nenaběhne</string>
+  <string name="diag_network">"síť:        %1$s"</string>
+  <string name="diag_network_on">připojena</string>
+  <string name="diag_network_off">NEPŘIPOJENA</string>
+  <string name="diag_webview">"WebView:    %1$s"</string>
+  <string name="diag_crashes">pády rendereru: %1$d</string>
+  <string name="diag_last_error">poslední chyba: %1$s</string>
+  <string name="diag_hint">zpět dvakrát = odchod z kiosku</string>
+  <string name="unknown">neznámé</string>
+  <string name="err_saved_rejected">uložená adresa odmítnuta: %1$s</string>
+  <string name="err_nav_blocked">navigace zablokována: %1$s</string>
+  <string name="err_intent_rejected">adresa z intentu odmítnuta: %1$s</string>
+  <string name="err_load">chyba %1$d: %2$s</string>
+  <string name="err_renderer">renderer spadl (%1$d×), byl znovu vytvořen</string>
+  <string name="diag_update">aktualizace: verze %1$s, stav %2$s</string>
+  <string name="upd_eyebrow">AKTUALIZACE KIOSKU</string>
+  <string name="upd_title">Je připravena nová verze %1$s</string>
+  <string name="upd_press_ok">Stiskni OK na ovladači</string>
+  <string name="upd_note">Instalace trvá pár sekund, pak se obsah vrátí sám.</string>
+  <string name="upd_countdown">Bez potvrzení se obsah vrátí za %1$s · Zpět = teď ne</string>
+</resources>

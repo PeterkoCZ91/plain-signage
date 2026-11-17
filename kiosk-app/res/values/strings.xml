@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default = English (device locale other than cs). For Czech see values-cs/. -->
+<resources>
+  <string name="toast_back_again">Press back once more to leave the kiosk</string>
+  <string name="chooser_open_app">Open app</string>
+  <string name="toast_no_launcher">Could not open the launcher or settings</string>
+  <string name="diag_title">KIOSK</string>
+  <string name="diag_screen">"screen:      %1$s"</string>
+  <string name="diag_autostart">"autostart:  %1$s"</string>
+  <string name="diag_autostart_on">active (app is the launcher)</string>
+  <string name="diag_autostart_off">INACTIVE — the screen will not start after a power outage</string>
+  <string name="diag_network">"network:    %1$s"</string>
+  <string name="diag_network_on">connected</string>
+  <string name="diag_network_off">NOT CONNECTED</string>
+  <string name="diag_webview">"WebView:    %1$s"</string>
+  <string name="diag_crashes">renderer crashes: %1$d</string>
+  <string name="diag_last_error">last error: %1$s</string>
+  <string name="diag_hint">back twice = leave the kiosk</string>
+  <string name="unknown">unknown</string>
+  <string name="err_saved_rejected">saved address rejected: %1$s</string>
+  <string name="err_nav_blocked">navigation blocked: %1$s</string>
+  <string name="err_intent_rejected">address from intent rejected: %1$s</string>
+  <string name="err_load">error %1$d: %2$s</string>
+  <string name="err_renderer">renderer crashed (%1$d×), restarted</string>
+  <string name="diag_update">update: version %1$s, state %2$s</string>
+  <string name="upd_eyebrow">KIOSK UPDATE</string>
+  <string name="upd_title">New version %1$s is ready</string>
+  <string name="upd_press_ok">Press OK on the remote</string>
+  <string name="upd_note">Installing takes a few seconds, then the content comes back by itself.</string>
+  <string name="upd_countdown">Without confirmation the content returns in %1$s · Back = not now</string>
+</resources>

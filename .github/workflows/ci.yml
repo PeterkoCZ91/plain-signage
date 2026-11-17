@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      # the server needs only segno (see deploy/app/Dockerfile); ruff and pytest are tools
+      - run: sudo apt-get install -y ffmpeg   # the thumbnail tests need it
+      - run: pip install ruff pytest segno
+      - name: Server (deploy/app)
+        working-directory: deploy/app
+        run: |
+          ruff check .
+          pytest -q
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: shellcheck -S warning deploy/*.sh deploy/tools/*.sh kiosk-app/build.sh wifi-app/build.sh
+      - run: bash deploy/test-backup-restore.sh
+
+  # the kiosk tests are plain Java (no Android), see docs/en/kiosk.md
+  kiosk-java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Kiosk tests
+        working-directory: kiosk-app
+        run: |
+          set -e
+          T=$(mktemp -d)
+          S=src/app/plainsignage/kiosk
+          P=app.plainsignage.kiosk
+          javac -d "$T" $S/Allowlist.java test/AllowlistTest.java && java -cp "$T" $P.AllowlistTest
+          javac -d "$T" $S/Watchdog.java test/WatchdogTest.java && java -cp "$T" $P.WatchdogTest
+          javac -d "$T" $S/UpdatePolicy.java test/UpdatePolicyTest.java && java -cp "$T" $P.UpdatePolicyTest
+          javac -d "$T" $S/Health.java test/HealthTest.java && java -cp "$T" $P.HealthTest
+
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+      - run: node --check deploy/app/tv/sw.js
+      - run: node --test deploy/app/tv/test/*.test.mjs
+
+  # smoke tests of the admin and the player in a real Chromium (they catch errors a UI catch would swallow)
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install pytest playwright segno
+      - run: playwright install --with-deps chromium
+      - run: sudo apt-get install -y ffmpeg
+      - run: pytest deploy/app/e2e -q
+
+  # the image is built, started via docker-compose.yml and must answer /api/health
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Temporary .env
+        run: |
+          printf 'SIGNAGE_ADMIN_USER=ci\nSIGNAGE_ADMIN_PASS=%s\n' "$(openssl rand -hex 16)" > .env
+      - run: docker compose up -d --build
+      - name: Wait for /api/health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/health; then echo; exit 0; fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Admin is protected
+        run: test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/admin)" = 401
+      - if: always()
+        run: docker compose down -v

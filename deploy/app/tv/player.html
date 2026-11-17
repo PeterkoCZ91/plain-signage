@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+// Align the viewport to physical pixels on high-density screens.
+//
+// An Android TV box reports 1920x1080 at 320 dpi, i.e. dpr 2. The WebView then
+// lays the page out at 960 CSS px and scales it up twice, and because our
+// layout has px caps inside clamp() (e.g. the QR label `clamp(11px, 1.5vw, 20px)`),
+// 20 px grows to 28.8 px after scaling and the idle screen overflows.
+// Measured on a box: without this the QR column was cut off, while Chrome at
+// the same size fits. The large-screen condition keeps phones out - there the
+// density scaling is correct, just not on a signage screen.
+// (`physicalWidth` = physical screen width in device pixels.)
+(function () {
+  var d = window.devicePixelRatio || 1;
+  var physicalWidth = (window.screen && screen.width ? screen.width : 0) * d;
+  if (d > 1.05 && physicalWidth >= 1280) {
+    var m = document.querySelector('meta[name=viewport]');
+    if (m) {
+      m.setAttribute('content', 'width=' + Math.round(physicalWidth)
+                              + ', initial-scale=' + (1 / d) + ', viewport-fit=cover');
+      // The rest of the page uses this marker to tell it runs with an aligned
+      // viewport: the reported canvas size must be recomputed and the
+      // full-screen hint makes no sense (nobody to tap on a kiosk).
+      window.__viewportScale = 1 / d;
+    }
+  }
+})();
+</script>
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<!-- when added to the home screen, it runs full screen without the browser bar -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#08080a">
+<title>Player</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  #stage { position: fixed; inset: 0; background: #000; }
+  .item {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; background: #000;
+    background-position: center; background-repeat: no-repeat; background-size: contain;
+    -webkit-transform: translateZ(0); -webkit-backface-visibility: hidden;
+  }
+  .item.fade { -webkit-transition: opacity .45s ease-in-out; transition: opacity .45s ease-in-out; }
+  .item.cut { -webkit-transition: none; transition: none; }
+  .item.show { opacity: 1; }
+  .item video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  /* The sharp content sits ABOVE the blurred background. The own background of
+     .item cannot be used: .item is a stacking context because of translateZ(0),
+     and in paint order an element's background is drawn BEFORE descendants with
+     z-index:-1 - the blurred layer would cover the photo (and it did). For video
+     the background is empty, so ::after draws nothing and playback is unchanged. */
+  .item::after {
+    content: ""; position: absolute; inset: 0; z-index: 1;
+    background-image: inherit;
+    background-position: center; background-repeat: no-repeat; background-size: contain;
+  }
+  /* blurred background under the content when the aspect ratio does not match the screen */
+  .bg {
+    position: absolute; inset: 0; z-index: -1;
+    background-position: center; background-repeat: no-repeat; background-size: cover;
+    filter: blur(28px) brightness(.4); transform: scale(1.1);
+  }
+  /* --- content orientation (chosen in the admin, per screen) ---------------
+     Portrait: a physically rotated panel gets a landscape picture from the
+     player box, so the page has to rotate it. <body> itself is rotated - a
+     transform on an ancestor becomes the containing block for position:fixed
+     descendants too, so the stage, the idle screen and the corner QR all
+     rotate with a single rule. */
+  body.portrait {
+    position: absolute; left: 50%; top: 50%;
+    width: 100vh; height: 100vw;
+    -webkit-transform: translate(-50%, -50%) rotate(90deg);
+    transform: translate(-50%, -50%) rotate(90deg);
+    -webkit-transform-origin: center center; transform-origin: center center;
+  }
+  /* The screen can be hung either way; without the second direction the
+     content would be upside down in half of the installations. The layout is
+     shared, only the angle changes. */
+  body.portrait.flipped {
+    -webkit-transform: translate(-50%, -50%) rotate(270deg);
+    transform: translate(-50%, -50%) rotate(270deg);
+  }
+  /* After rotation the canvas is portrait but the viewport stays wide - the
+     two-column idle layout (media query below) would leave empty sides. */
+  body.portrait #idle .idlecol {
+    /* space-evenly, not space-between: on a tall canvas the zones would jump
+       to the edges and leave a black area in the middle (seen in a render). */
+    flex-direction: column; justify-content: space-evenly; gap: 0;
+    inset: clamp(30px,5vmin,64px) clamp(24px,5vmin,60px) clamp(60px,9vmin,110px);
+  }
+  body.portrait #idle .zone { width: 100%; }
+  body.portrait #idle .zone:first-child { align-items: center; text-align: center; flex: none; }
+  body.portrait #idle .tagline .rule { margin-left: auto; margin-right: auto; }
+  /* After rotation the canvas width equals the viewport HEIGHT, so sizes
+     computed from `vw` are oversized - the logo then fills the whole side and
+     overflows (seen on a box). In this mode the horizontal sizes therefore
+     come from `vh`. */
+  body.portrait #idle .brand { font-size: clamp(30px, 8.4vh, 104px); letter-spacing: .12em; }
+  body.portrait #idle .tagline { font-size: clamp(13px, 2.1vh, 26px); }
+  body.portrait #idle .tagline .rule { width: clamp(120px, 22vh, 260px); }
+  body.portrait #idle .qrwrap .label { font-size: clamp(10px, 1.5vh, 18px); }
+  body.portrait #idle .qrcard img { width: clamp(140px, 24vh, 240px); }
+  body.portrait #idle.oneqr .qrcard img { width: clamp(170px, 30vh, 300px); }
+  body.portrait #idle .qrpair .qrwrap + .qrwrap .qrcard img { width: clamp(96px, 15vh, 150px); }
+  body.portrait #idle .qrpair .qrwrap + .qrwrap .label { font-size: clamp(9px, 1.15vh, 14px); }
+  body.portrait #idle .qrpair .qrwrap + .qrwrap .qrhandle { font-size: clamp(10px, 1.2vh, 15px); }
+  body.portrait #idle .foot .ig { font-size: clamp(13px, 1.9vh, 23px); }
+  body.portrait #idle .foot .contact { font-size: clamp(11px, 1.5vh, 19px); }
+  /* Fill: the content covers the whole canvas and the edges are cropped. */
+  body.fill .item, body.fill .item::after { background-size: cover; }
+  body.fill .item video { object-fit: cover; }
+  /* --- idle / fallback screen (client brand: black + gold) ---
+     Layout: one layered frame, inside 3 zones (logo / QR / footer)
+     spread evenly over the whole height -> no empty band. */
+  #idle {
+    position: fixed; inset: 0; overflow: hidden;
+    background:
+      radial-gradient(ellipse 75% 50% at 50% 26%, rgba(201,162,77,.18), transparent 68%),
+      radial-gradient(ellipse 120% 60% at 50% 112%, rgba(201,162,77,.10), transparent 62%),
+      #08080a;
+    font-family: "Georgia", "Times New Roman", serif;
+  }
+  /* subtle frame that really frames the whole content */
+  .frame {
+    position: absolute; inset: clamp(18px,3.2vmin,40px);
+    border: 1px solid rgba(201,162,77,.22); border-radius: 4px;
+    pointer-events: none;
+  }
+  .frame::before, .frame::after {   /* golden corner accents */
+    content: ""; position: absolute; width: 26px; height: 26px;
+    border: 2px solid rgba(201,162,77,.55);
+  }
+  .frame::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+  .frame::after  { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+
+  /* logo + QR as one centered block (no empty band on portrait) */
+  .idlecol {
+    position: absolute; inset: clamp(40px,7vmin,84px) 6% clamp(96px,14vmin,150px);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: clamp(30px,6vh,80px); text-align: center;
+  }
+  .zone { display: flex; flex-direction: column; align-items: center; width: 100%; }
+
+  /* --- top zone: wordmark + tagline --- */
+  .brand {
+    font-weight: 600; letter-spacing: .18em; line-height: 1;
+    font-size: clamp(38px, 9vw, 132px);
+    background: linear-gradient(180deg, #f7ead0 0%, #e3c47c 40%, #c69a45 72%, #f0d9a3 100%);
+    background-size: 100% 220%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: #e3c47c;
+    text-shadow: 0 0 60px rgba(201,162,77,.18);
+    padding-left: .18em;
+    animation: sheen 7s ease-in-out infinite;
+  }
+  .brand .p1 { font-weight: 600; }
+  @keyframes sheen { 0%,100%{background-position:0 0} 50%{background-position:0 100%} }
+  .tagline {
+    margin-top: clamp(12px, 2.4vh, 26px); color: #cbb072;
+    font-style: italic; font-size: clamp(15px, 2.3vw, 30px);
+    letter-spacing: .03em;
+  }
+  .tagline .rule {
+    display: block; margin: clamp(14px,2.6vh,28px) auto 0; width: clamp(140px,24vw,340px);
+    height: 1px; background: linear-gradient(90deg, transparent, #c9a24d 50%, transparent);
+  }
+
+  /* --- middle zone: QR cards stacked; the first is primary, the second smaller --- */
+  .qrpair { display: flex; flex-direction: column; align-items: center;
+            gap: clamp(12px,2.6vh,28px); }
+  .qrwrap { display: flex; flex-direction: column; align-items: center;
+            gap: clamp(8px,1.4vh,16px); }
+  .qrwrap .label {
+    color: #cbb072; font-family: system-ui, sans-serif; font-weight: 700;
+    letter-spacing: .2em; font-size: clamp(11px, 1.5vw, 20px); text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: .6em; white-space: nowrap;
+  }
+  /* second card = secondary contact: smaller, calmer, separated by a line */
+  .qrpair .qrwrap + .qrwrap::before {
+    content: ""; width: clamp(120px,16vw,220px); height: 1px;
+    margin-bottom: clamp(8px,1.6vh,16px);
+    background: linear-gradient(90deg, transparent, rgba(201,162,77,.55) 50%, transparent);
+  }
+  .qrpair .qrwrap + .qrwrap .qrcard { animation: none;
+    box-shadow: 0 0 0 1px rgba(201,162,77,.5), 0 8px 30px rgba(0,0,0,.5); }
+  .qrpair .qrwrap + .qrwrap .qrcard img { width: clamp(96px, 17vh, 160px); border-radius: 12px; }
+  .qrpair .qrwrap + .qrwrap .label { font-size: clamp(10px, 1.15vw, 15px); }
+  .qrpair .qrwrap + .qrwrap .qrhandle { font-size: clamp(11px, 1.2vw, 16px); font-weight: 600; }
+  .qrwrap .label svg { width: 1.35em; height: 1.35em; flex: none; }
+  .qrcard {
+    position: relative; padding: 0; border-radius: 18px;
+    box-shadow: 0 0 0 2px rgba(201,162,77,.6), 0 0 46px rgba(201,162,77,.22),
+                0 14px 50px rgba(0,0,0,.6);
+    animation: qrpulse 4.5s ease-in-out infinite;
+  }
+  .qrcard img {
+    display: block; width: clamp(150px, 28vh, 270px); height: auto; border-radius: 18px;
+  }
+  /* the only visible card -> larger QR, so it can be scanned from afar */
+  #idle.oneqr .qrcard img { width: clamp(190px, 40vh, 330px); }
+  @keyframes qrpulse {
+    0%,100%{ box-shadow: 0 0 0 2px rgba(201,162,77,.55), 0 0 30px rgba(201,162,77,.14), 0 14px 50px rgba(0,0,0,.6); }
+    50%    { box-shadow: 0 0 0 2px rgba(201,162,77,.85), 0 0 54px rgba(201,162,77,.30), 0 14px 50px rgba(0,0,0,.6); }
+  }
+
+  /* --- bottom zone: contact, anchored to the bottom of the frame --- */
+  .foot {
+    position: absolute; left: 0; right: 0; bottom: clamp(40px,7vmin,80px);
+    display: flex; flex-direction: column; gap: clamp(4px,1vh,10px); align-items: center;
+    font-family: system-ui, sans-serif;
+  }
+  .foot .ig { color: #e3c47c; font-weight: 700; letter-spacing: .1em;
+              font-size: clamp(15px, 2.1vw, 26px); }
+  .foot .contact { color: #c2a355; letter-spacing: .1em;
+                   font-size: clamp(13px, 1.7vw, 22px); }
+
+  /* --- WIDE screen (smart TV 16:9): two columns so it does not look empty ---
+     brand on the left, QR on the right; fills the width instead of a narrow center column */
+  @media (min-aspect-ratio: 13/10) {
+    .idlecol {
+      inset: clamp(40px,7vmin,84px) clamp(48px,9vw,160px) clamp(84px,12vmin,140px);
+      flex-direction: row; justify-content: space-between;
+      gap: clamp(40px,7vw,130px);
+    }
+    .zone { width: auto; }
+    .zone:first-child { align-items: flex-start; text-align: left; flex: 1; }
+    .brand { font-size: clamp(40px, 6.6vw, 116px); }
+    .tagline { font-size: clamp(15px, 1.9vw, 30px); }
+    .tagline .rule { margin-left: 0; }
+    .qrcard img { width: clamp(160px, 30vh, 280px); }
+    #idle.oneqr .qrcard img { width: clamp(200px, 44vh, 340px); }
+  }
+  /* QR hidden on the idle screen -> the logo is centered */
+  #idle.noqr #qrzone { display: none; }
+  #idle.noqr .idlecol { justify-content: center; }
+  @media (min-aspect-ratio: 13/10) {
+    #idle.noqr .zone:first-child { align-items: center; text-align: center; flex: none; }
+    #idle.noqr .tagline .rule { margin-left: auto; margin-right: auto; }
+  }
+  #err {
+    position: fixed; left: 12px; bottom: 8px; color: #2f2f34;
+    font: 11px monospace; z-index: 5;
+  }
+  /* QR in the corner over the content (optional, per screen) */
+  #qrcorner {
+    /* Offset from the bottom edge by more than the frame width: a QR stuck to
+       the edge looks like a bug and overscan eats it on some TVs. */
+    position: fixed; right: 4vmin; bottom: 7vmin; z-index: 8; display: none;
+    background: #f5f0e4; padding: 1.4vmin; border-radius: 2vmin;
+    box-shadow: 0 0 0 2px rgba(201,162,77,.7), 0 8px 30px rgba(0,0,0,.5);
+  }
+  #qrcorner img { display: block; width: clamp(90px, 12vmin, 170px); height: auto; }
+  #qrcorner.on { display: block; }
+  .qrhandle {
+    color: #e3c47c; font-family: system-ui, sans-serif; font-weight: 700;
+    letter-spacing: .06em; font-size: clamp(14px, 1.9vw, 26px);
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="idle">
+  <div class="frame"></div>
+  <div class="idlecol">
+    <div class="zone">
+      <div class="brand" id="wordmark"><span class="p1"></span>YOUR BRAND</div>
+      <div class="tagline"><span id="tagline" data-i18n="tagline">Digital content for your brand</span><span class="rule"></span></div>
+    </div>
+    <div class="zone" id="qrzone">
+      <div class="qrpair">
+        <div class="qrwrap" id="qrwrap1">
+          <div class="label"><svg class="ico-ig" viewBox="0 0 24 24" fill="none" stroke="#cbb072" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="#cbb072" stroke="none"/></svg><svg class="ico-mail" style="display:none" viewBox="0 0 24 24" fill="none" stroke="#cbb072" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="m3 6 9 7 9-7"/></svg><span class="labeltext" data-i18n="qrIg">Follow us on Instagram</span></div>
+          <div class="qrcard"><img id="idleqr" src="/assets/default-qr.png" alt="QR"></div>
+          <div class="qrhandle"></div>
+        </div>
+        <div class="qrwrap" id="qrwrap2" style="display:none">
+          <div class="label"><svg class="ico-ig" style="display:none" viewBox="0 0 24 24" fill="none" stroke="#cbb072" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.2" fill="#cbb072" stroke="none"/></svg><svg class="ico-mail" viewBox="0 0 24 24" fill="none" stroke="#cbb072" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="m3 6 9 7 9-7"/></svg><span class="labeltext"></span></div>
+          <div class="qrcard"><img id="idleqr2" src="/assets/default-qr.png" alt="QR"></div>
+          <div class="qrhandle"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <div class="contact"><span id="footmail">info@example.com · </span><span id="footrest">+000 000 000 000 · Your City</span></div>
+  </div>
+</div>
+<div id="qrcorner"><img id="cornerqr" src="/assets/default-qr.png" alt="QR"></div>
+<div id="err"></div>
+
+<script>
+// Modern player for smart TVs (Tizen/webOS/AndroidTV). ES6+, fetch, <video>.
+// Pull model: every few seconds it asks the server for the playlist and loops it.
+(() => {
+  // i18n:begin
+  // Texts for the viewer and the technician (en = default, cs). Client content
+  // (brand, labels from the admin) is not translated. Language: ?lang= > browser language.
+  const I18N = {
+    cs: {
+      title: 'Přehrávač',
+      tagline: 'Digitální obsah pro vaši značku',
+      qrEmail: 'Napište nám',
+      qrIg: 'Sledujte nás na Instagramu',
+      qrWeb: 'Víc najdete tady',
+      qrWeb2: 'Naskenujte a podívejte se',
+      fsHint: 'Klepněte nebo stiskněte OK pro zvuk a celou obrazovku',
+      newVer: 'nová verze – obnovuji',
+      offline: 'offline – přehrávám uloženou kopii ({0})',
+      h264why: 'prohlížeč neumí H.264 – {0}',
+      h264: 'tento prohlížeč neumí H.264, žádné video nepřehraje – použijte Firefox nebo Chrome od Googlu',
+      cannotPlay: 'nepodařilo se přehrát: {0}',
+      noResponse: 'bez odezvy',
+      image: 'obrázek {0}'
+    },
+    en: {
+      title: 'Player',
+      tagline: 'Digital content for your brand',
+      qrEmail: 'Write to us',
+      qrIg: 'Follow us on Instagram',
+      qrWeb: 'Find more here',
+      qrWeb2: 'Scan to take a look',
+      fsHint: 'Tap or press OK for sound and full screen',
+      newVer: 'new version – reloading',
+      offline: 'offline – playing the stored copy ({0})',
+      h264why: 'browser does not support H.264 – {0}',
+      h264: 'this browser does not support H.264 and cannot play any video – use Firefox or Google Chrome',
+      cannotPlay: 'cannot play: {0}',
+      noResponse: 'no response',
+      image: 'image {0}'
+    }
+  };
+  // query: location.search; navLang: navigator.language. Pure function.
+  function pickLang(query, navLang) {
+    const m = /[?&]lang=([^&#]*)/.exec(String(query || ''));
+    const q = m ? m[1].toLowerCase() : '';
+    if (/^en/.test(q)) return 'en';
+    if (/^cs/.test(q)) return 'cs';
+    return /^cs/i.test(String(navLang || '')) ? 'cs' : 'en';
+  }
+  const LANG = pickLang(location.search, navigator.language);
+  function tp(key, arg) {
+    const s = (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key;
+    return s.replace('{0}', () => (arg === undefined ? '' : String(arg)));
+  }
+  // Default QR labels from the server (English, or Czech from an older server)
+  // -> key, shown in the player's language. A custom client label is not here
+  // and stays unchanged.
+  const QR_DEFAULT_LABELS = {
+    'Write to us': 'qrEmail', 'Follow us on Instagram': 'qrIg',
+    'Find more here': 'qrWeb', 'Scan to take a look': 'qrWeb2',
+    'Napište nám': 'qrEmail', 'Napiš nám': 'qrEmail',
+    'Sledujte nás na Instagramu': 'qrIg', 'Sleduj nás na Instagramu': 'qrIg',
+    'Víc najdete tady': 'qrWeb', 'Víc najdeš tady': 'qrWeb',
+    'Naskenujte a podívejte se': 'qrWeb2', 'Naskenuj a mrkni': 'qrWeb2'
+  };
+  function qrLabelText(label) {
+    const text = label || '';
+    const key = Object.prototype.hasOwnProperty.call(QR_DEFAULT_LABELS, text) ? QR_DEFAULT_LABELS[text] : null;
+    return key ? tp(key) : text;
+  }
+  // The HTML carries the default English; in another language it is overwritten by data-i18n.
+  if (LANG !== 'en') {
+    document.documentElement.lang = LANG;
+    document.title = tp('title');
+    if (document.querySelectorAll) {
+      document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tp(el.getAttribute('data-i18n')); });
+    }
+  }
+  // i18n:end
+  // /tv/ => default device "default"; /tv/<name> => that name
+  const _parts = location.pathname.split('/').filter(Boolean);
+  const DEVICE = (_parts[0] === 'tv' && _parts[1]) ? _parts[1] : 'default';
+  // QR (idle and corner) points to the target set for the screen (dynamic per device)
+  (function(){
+    const src = '/qr.png?device=' + encodeURIComponent(DEVICE);
+    const a = document.getElementById('idleqr'); if (a) a.src = src;
+    const b = document.getElementById('idleqr2'); if (b) b.src = src + '&slot=2';
+    const c = document.getElementById('cornerqr'); if (c) c.src = src;
+  })();
+  const POLL_MS = 15000;         // how often to check for playlist changes
+  const stage = document.getElementById('stage');
+  const idle = document.getElementById('idle');
+  const errEl = document.getElementById('err');
+
+  let items = [];
+  let allItems = [];            // last playlist from the server (before the visibility filter)
+  let version = null;
+  let idx = 0;
+  let timer = null;
+  let transition = "fade";
+  let fails = 0;            // how many items in a row failed to render
+  let showing = false;      // is content on screen right now? (state, not event)
+  let seq = 0;              // attempt order - reports from an abandoned item are dropped
+  let lastFail = '';        // why it failed last (sent in the heartbeat)
+  let lastUrl = '';         // what was being shown just now
+  let pending = false;      // the running attempt has not reported yet (neither picture nor error)
+  const RETRY_MS = 1500;    // delay between attempts so failures do not flood the browser
+  const ROUND_MS = 30000;   // the whole round failed -> retry slowly, with the idle card
+  const LOAD_MS = 120000;   // how long a video has to download before we give up
+  let build = null;         // server version from the playlist
+  let reloadAt = 0;         // != 0 => waiting for a suitable moment to reload
+
+  // How much space the browser has for the cache. When the quota is exhausted
+  // (typically a nearly full disk - Chrome derives it from free space), the
+  // service worker does not store the media and without a safety net playback
+  // would fail on every file.
+  let storage = '';         // "used/quota" in MB
+  let storageMeasuredAt = 0;
+  // How many playlist items really sit in Cache Storage. Answers the question
+  // "is the content in memory and does it survive a network outage?", which
+  // could not be found out from the admin until now: the service worker knows
+  // (it declares a playlist valid only after all media are downloaded) but
+  // never reported it anywhere.
+  let cacheState = '';      // "stored/total", empty = not measured
+
+  // Play from a local copy, not over the network.
+  //
+  // <video> pulls data with Range requests and those cannot be found in Cache
+  // Storage - the service worker strategy then falls back to the network and
+  // the video is downloaded on EVERY round. Measured on a box: 11 requests with
+  // code 206 in 4 minutes and 9 playback stalls, exactly the stuttering seen on
+  // the TV. So we make a blob from the cache and play from it: no Range, no network.
+  // Cap by device memory: a box with 1 GB RAM (Xiaomi stick) must not hold
+  // hundreds of MB of copies. Chromium reports deviceMemory in GB (0.25 ... 8),
+  // elsewhere it is missing -> the original 400 MB.
+  const BLOB_LIMIT = Math.min(400, Math.max(64, (navigator.deviceMemory || 4) * 100)) * 1024 * 1024;
+
+  // Add a new item to the rotation only once it is fully in memory. Otherwise
+  // the first playback would be pulled from the network in parallel with the
+  // cache download - double transfer and stuttering on weak Wi-Fi. Applies only
+  // under a service worker (otherwise nothing is cached); after
+  // WAIT_FOR_CACHE_MS the item is played from the network too, so it does not
+  // vanish when it cannot be stored (full storage, download error).
+  const WAIT_FOR_CACHE_MS = 3 * 60 * 1000;
+  let inMemory = null;                     // Set of URLs in Cache Storage; null = not measured
+  const firstSeen = new Map();             // URL -> when it first appeared in the playlist
+  function cacheActive() {
+    return !!(window.caches && navigator.serviceWorker && navigator.serviceWorker.controller);
+  }
+  function isReady(it) {
+    if (!cacheActive() || !inMemory) return true;
+    const u = new URL(it.url, location.origin).href;
+    if (inMemory.has(u)) return true;
+    const since = firstSeen.get(u);
+    return since !== undefined && Date.now() - since >= WAIT_FOR_CACHE_MS;
+  }
+  function recordNew(list) {
+    const now = Date.now(), current = new Set();
+    for (const it of list) {
+      const u = new URL(it.url, location.origin).href;
+      current.add(u);
+      if (!firstSeen.has(u)) firstSeen.set(u, now);
+    }
+    for (const u of Array.from(firstSeen.keys())) if (!current.has(u)) firstSeen.delete(u);
+  }
+  const copies = new Map();                // absolute URL -> blob URL
+  function dropCopies(except) {
+    for (const [u, blob] of Array.from(copies)) {
+      if (except && except.has(u)) continue;
+      URL.revokeObjectURL(blob);
+      copies.delete(u);
+    }
+  }
+  async function measureCache(list) {
+    if (!window.caches || !list || !list.length) { cacheState = ''; dropCopies(null); return; }
+    try {
+      const cache = await caches.open('signage-media-v1');
+      const valid = new Set();
+      const found = [];
+      for (const it of list) {
+        const u = new URL(it.url, location.origin).href;
+        const resp = await cache.match(u);
+        if (resp) { valid.add(u); found.push([u, resp]); }
+      }
+      inMemory = valid;                    // the rotation knows right away what is ready
+      const have = valid.size;
+      let bytes = 0;
+      for (const [u, resp] of found) {
+        if (copies.has(u)) continue;
+        const b = await resp.blob();
+        bytes += b.size;
+        if (bytes > BLOB_LIMIT) break;     // the rest plays from the network
+        copies.set(u, URL.createObjectURL(b));
+      }
+      dropCopies(valid);                   // after a playlist change release the invalid ones
+      cacheState = have + '/' + list.length;
+    } catch (_) { cacheState = ''; inMemory = null; }
+  }
+
+  // Playback smoothness. "Looks fine" is not a measurement: we care how many
+  // frames the decoder dropped and how many times playback stopped to buffer
+  // more data. Both are visible only on the device, the server cannot tell.
+  let dropped = '';         // "dropped/total" frames of the last item
+  let stalls = 0;           // how many times the video stalled ('waiting' event)
+  function measureSmoothness(v) {
+    try {
+      if (!v || !v.getVideoPlaybackQuality) return;
+      const q = v.getVideoPlaybackQuality();
+      if (q && q.totalVideoFrames) {
+        dropped = (q.droppedVideoFrames || 0) + '/' + q.totalVideoFrames;
+      }
+    } catch (_) { /* the browser cannot do it - no problem */ }
+  }
+
+  async function measureStorage() {
+    try {
+      if (!navigator.storage || !navigator.storage.estimate) return;
+      const e = await navigator.storage.estimate();
+      if (!e || !e.quota) return;
+      storage = Math.round((e.usage || 0) / 1048576) + '/' + Math.round(e.quota / 1048576);
+    } catch (_) { /* the browser cannot do it - no problem */ }
+  }
+
+  // Can this browser play H.264 at all? Distribution Chromium is commonly built
+  // without proprietary codecs (Firefox ships its own H.264), and then rejects
+  // EVERY video with NotSupportedError. Without this check it looks like a
+  // broken file and the error is hunted on the server in vain.
+  const canH264 = (() => {
+    try {
+      const v = document.createElement('video');
+      return !!(v.canPlayType && (v.canPlayType('video/mp4; codecs="avc1.42E01E"')
+                               || v.canPlayType('video/mp4; codecs="avc1.4D401F"')));
+    } catch (_) { return true; }   // unknown -> do not alarm, behave as before
+  })();
+
+  if ('serviceWorker' in navigator && 'caches' in window) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
+  const err = (m) => { errEl.textContent = m || ''; };
+
+  // today's date as YYYY-MM-DD in the panel's local time (the clock is correct)
+  function todayStr() {
+    const d = new Date(), p = n => (n < 10 ? '0' : '') + n;
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  // schedule:begin
+  // Item schedule {days:[0..6] (0 = Monday), from:"HH:MM", to:"HH:MM"} by the
+  // device's local time. Missing days = every day; from > to = across midnight
+  // (the window belongs to the day it starts); from and to are taken only
+  // together, an invalid schedule is ignored (the item plays). The window end
+  // `to` is exclusive.
+  function scheduleActive(sch, now) {
+    if (!sch || typeof sch !== 'object') return true;
+    const hm = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    const days = Array.isArray(sch.days) && sch.days.length ? sch.days : null;
+    const day = (now.getDay() + 6) % 7, before = (day + 6) % 7;
+    const inDays = d => !days || days.indexOf(d) >= 0;
+    const a = typeof sch.from === 'string' ? hm.exec(sch.from) : null;
+    const b = typeof sch.to === 'string' ? hm.exec(sch.to) : null;
+    if (!a || !b) return inDays(day);
+    const from = +a[1] * 60 + +a[2], to = +b[1] * 60 + +b[2];
+    if (from === to) return true;
+    const mins = now.getHours() * 60 + now.getMinutes();
+    if (from < to) return inDays(day) && mins >= from && mins < to;
+    return (inDays(day) && mins >= from) || (inDays(before) && mins < to);
+  }
+  // schedule:end
+  // an item is visible: enabled AND valid (from-until date, empty = no limit)
+  // AND in the schedule (days and time in the week, missing = always)
+  function isVisible(it) {
+    if (it.enabled === false) return false;
+    const today = todayStr();
+    if (it.from && today < it.from) return false;
+    if (it.until && today > it.until) return false;
+    return scheduleActive(it.schedule, new Date());
+  }
+  // QR in the corner over the content - on/off per screen
+  const qrCorner = document.getElementById('qrcorner');
+  // derives the label under the QR from the URL (what the viewer scans)
+  function qrHandle(url) {
+    if (!url) return '';
+    try {
+      const u = new URL(url);
+      if (/(^|\.)instagram\.com$/i.test(u.hostname)) {
+        const seg = u.pathname.split('/').filter(Boolean)[0];
+        if (seg) return '@' + seg;
+      }
+      return u.hostname.replace(/^www\./, '') + (u.pathname.length > 1 ? u.pathname : '');
+    } catch (e) { return url; }
+  }
+  // fills one QR card (heading, icon, image, handle); null = hide
+  const qrSrcKeys = [null, null];
+  function fillCard(n, card) {
+    const wrap = document.getElementById('qrwrap' + n);
+    if (!wrap) return;
+    if (!card) { wrap.style.display = 'none'; qrSrcKeys[n - 1] = null; return; }
+    wrap.style.display = '';
+    const lbl = wrap.querySelector('.labeltext');
+    if (lbl) lbl.textContent = qrLabelText(card.label);
+    const ig = wrap.querySelector('.ico-ig');
+    if (ig) ig.style.display = card.kind === 'instagram' ? '' : 'none';
+    const ml = wrap.querySelector('.ico-mail');
+    if (ml) ml.style.display = card.kind === 'email' ? '' : 'none';
+    const h = wrap.querySelector('.qrhandle');
+    if (h) { h.textContent = card.handle || '';
+             h.style.display = card.handle ? '' : 'none'; }
+    // target change => new image URL, otherwise the TV keeps the old QR until reload
+    if (card.url !== qrSrcKeys[n - 1]) {
+      qrSrcKeys[n - 1] = card.url;
+      const img = wrap.querySelector('.qrcard img');
+      if (img) img.src = '/qr.png?device=' + encodeURIComponent(DEVICE)
+                       + '&slot=' + (card.slot || n)
+                       + '&v=' + encodeURIComponent(card.url || '');
+    }
+  }
+  let cornerKey = null;
+  function applySettings(s) {
+    if (qrCorner) qrCorner.classList.toggle('on', !!(s && s.qrCorner));
+    transition = s && s.transition === "cut" ? "cut" : "fade";
+    // content orientation; anything other than the known choices = today's landscape behavior
+    // Body classes: portrait (both portrait modes), flipped (rotated the other way), fill (cover).
+    const fitMode = s && s.fit;
+    // Both portrait modes share the layout, they differ only in rotation direction.
+    document.body.classList.toggle('portrait', fitMode === 'portrait' || fitMode === 'portrait270');
+    document.body.classList.toggle('flipped', fitMode === 'portrait270');
+    document.body.classList.toggle('fill', fitMode === 'fill');
+    // the cards (IG / e-mail) are sent by the server; an old playlist from the
+    // offline cache lacks them - then we build one card the old way from qrUrl
+    const cards = (s && s.qrCards) ||
+      [{url: (s && s.qrUrl) || '', kind: s && s.qrKind, slot: 1,
+        label: (s && s.qrLabel) || tp('qrIg'),
+        handle: (s && s.qrHandle !== undefined) ? s.qrHandle : qrHandle(s && s.qrUrl)}];
+    fillCard(1, cards[0]);
+    fillCard(2, cards[1]);
+    idle.classList.toggle('noqr', cards.length === 0);   // none => center the logo
+    idle.classList.toggle('oneqr', cards.length === 1);  // one => larger QR
+    // contact in the footer from the device brand (textContent, never innerHTML);
+    // without a brand (old server) the static default text from the HTML stays
+    const br = s && s.brand;
+    if (br && typeof br === 'object') {
+      const fmb = document.getElementById('footmail');
+      if (fmb) fmb.textContent = String(br.email || '') + ' · ';
+      const fr = document.getElementById('footrest');
+      if (fr) fr.textContent = [br.phone, br.city].filter(Boolean).join(' · ');
+      // wordmark "LEAD|REST" (LEAD in bold) and tagline from the brand; without
+      // them the name in capitals / the built-in neutral text stays
+      const wm = document.getElementById('wordmark');
+      const word = String(br.wordmark || br.name || '').toUpperCase();
+      if (wm && word) {
+        const cut = word.indexOf('|');
+        const lead = cut < 0 ? '' : word.slice(0, cut);
+        const rest = cut < 0 ? word : word.slice(cut + 1);
+        wm.textContent = '';
+        const sp = document.createElement('span');
+        sp.className = 'p1';
+        sp.textContent = lead;
+        wm.appendChild(sp);
+        wm.appendChild(document.createTextNode(rest));
+      }
+      const tg = document.getElementById('tagline');
+      const tagText = LANG === 'cs' ? (br.taglineCs || br.taglineEn) : (br.taglineEn || br.taglineCs);
+      if (tg && tagText) tg.textContent = String(tagText);
+    }
+    // e-mail either under the QR or in the footer - never twice on the screen
+    const fm = document.getElementById('footmail');
+    if (fm) fm.style.display = cards.some(c => c && c.kind === 'email') ? 'none' : '';
+    // corner QR over the content = primary target
+    const key = (s && s.qrUrl) || '';
+    if (key !== cornerKey) {
+      cornerKey = key;
+      const c = document.getElementById('cornerqr');
+      if (c) c.src = '/qr.png?device=' + encodeURIComponent(DEVICE)
+                   + '&v=' + encodeURIComponent(key);
+    }
+  }
+
+  // ---- fullscreen (like F11) ----------------------------------------------
+  // Browsers do not allow fullscreen without a user gesture. So: we try right
+  // away (works in a kiosk / home-screen PWA), and otherwise switch on the
+  // FIRST touch, click or key press (one tap is enough during installation).
+  let soundOn = false;            // sound unlocks only by a gesture (see armFs)
+  function goFullscreen() {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen
+             || el.webkitRequestFullScreen || el.mozRequestFullScreen
+             || el.msRequestFullscreen;
+    if (req) { try { const p = req.call(el); if (p && p.catch) p.catch(() => {}); }
+               catch (e) {} }
+  }
+  function isFs() {
+    return document.fullscreenElement || document.webkitFullscreenElement
+        || document.webkitCurrentFullScreenElement || document.msFullscreenElement;
+  }
+  // In the kiosk (the app's own WebView on the box) the page covers the whole
+  // area, but the Fullscreen API was never used - so isFs() would never detect
+  // fullscreen and the hint would stay on the ad permanently. We detect it by
+  // the viewport matching the screen exactly.
+  function isWholeSurface() {
+    // An aligned viewport (kiosk / box with higher density) deliberately
+    // decouples innerWidth and screen.width, so the comparison below would
+    // give nonsense.
+    if (window.__viewportScale) return true;
+    return !!(screen && screen.width && screen.height)
+        && Math.abs(window.innerWidth - screen.width) <= 4
+        && Math.abs(window.innerHeight - screen.height) <= 4;
+  }
+  function isFullScreenNow() { return !!isFs() || isWholeSurface(); }
+  // hint "tap for full screen" until we are fullscreen
+  const fsHint = document.createElement('div');
+  fsHint.textContent = tp('fsHint');
+  fsHint.style.cssText = 'position:fixed;right:14px;bottom:12px;z-index:9;'
+    + 'font:600 13px/1 system-ui,sans-serif;color:#cbb072;background:rgba(0,0,0,.5);'
+    + 'padding:8px 12px;border-radius:8px;opacity:.85;transition:opacity .4s';
+  if (!isWholeSurface()) document.body.appendChild(fsHint);   // never created in the kiosk
+  function armFs() {
+    goFullscreen();
+    // the same gesture unlocks sound; it unmutes the running video only if it is allowed to have sound
+    if (!soundOn) {
+      soundOn = true;
+      const cur = stage.lastElementChild;
+      if (cur && cur._video && cur._wantSound) { cur._video.muted = false;
+        try { cur._video.play(); } catch (e) {} }
+    }
+    setTimeout(() => { if (isFullScreenNow()) { fsHint.style.opacity = '0';
+      setTimeout(() => fsHint.remove(), 500); } }, 300);
+  }
+  ['click', 'touchend', 'keydown'].forEach(ev =>
+    window.addEventListener(ev, armFs, { passive: true }));
+  goFullscreen();                       // try right away (kiosk/PWA allows it)
+  window.addEventListener('load', () => { if (isFullScreenNow()) fsHint.remove(); });
+
+  /**
+   * Tries to turn on sound for a running video without a user gesture.
+   *
+   * In the kiosk this works (the WebView app has the gesture requirement
+   * disabled), an ordinary browser refuses. So sound is tried only AFTER the
+   * video starts and on refusal we go back to silence at once - had we bet on
+   * sound already at start, the browser would block playback and we would be
+   * left with a black screen.
+   */
+  function tryUnmutedWithoutGesture(v) {
+    v.muted = false;
+    const resume = () => { const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+    const p = v.play();
+    if (p && p.catch) p.catch(() => { v.muted = true; resume(); });
+    // Some browsers do not reject play(), they just silently stop the video.
+    setTimeout(() => { if (v.paused && !v.ended) { v.muted = true; resume(); } }, 500);
+  }
+
+  async function poll() {
+    // the heartbeat also carries the rendering state: ok=1 when at least one
+    // item has appeared on screen since the last heartbeat (an empty playlist
+    // is a legitimate state, also ok=1), err = number of failures in a row
+    // State, not event: a long spot that plays calmly generates no new event -
+    // if only changes were reported, it would look like a fault.
+    const ok = (showing || !items.length) ? 1 : 0;
+    // Storage: right away on failure, otherwise once per 10 min (box memory
+    // monitoring in the admin; estimate() is cheap but every 15 s is wasteful).
+    if (fails || Date.now() - storageMeasuredAt >= 600000) {
+      storageMeasuredAt = Date.now();
+      await measureStorage();
+    }
+    // canvas size in real pixels - the server uses it to decide whether a
+    // warning about a large video makes sense at all (4K on a 4K TV is fine)
+    // With an aligned viewport clientWidth already counts in physical pixels,
+    // so the dpr must be divided out - otherwise 1920x1080 would be reported
+    // as 3840x2160 and the server would needlessly complain that the content
+    // has a low resolution.
+    const dpr = (window.devicePixelRatio || 1) * (window.__viewportScale || 1);
+    const pw = Math.round(document.documentElement.clientWidth * dpr);
+    const ph = Math.round(document.documentElement.clientHeight * dpr);
+    try {
+      const r = await fetch(`/api/tv/${encodeURIComponent(DEVICE)}/playlist`
+        + `?heartbeat=1&ok=${ok}&err=${fails}&w=${pw}&h=${ph}&h264=${canH264 ? 1 : 0}`
+        + (lastFail ? `&why=${encodeURIComponent(lastFail.slice(0, 120))}` : '')
+        + (storage ? `&quota=${encodeURIComponent(storage)}` : '')
+        + (cacheState ? `&cache=${cacheState}` : '')
+        + (dropped ? `&drop=${dropped}` : '')
+        + (stalls ? `&stall=${stalls}` : '')
+        // The kiosk app on the box cannot be recognized from the User-Agent
+        // (the WebView reports the same as the vendor browser and the heartbeat
+        // also goes through the service worker), so the app signs itself into
+        // the page and we pass it on.
+        + (window.__kiosk ? `&kiosk=${encodeURIComponent(String(window.__kiosk).slice(0, 16))}` : ''),
+        { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      // a new version was deployed -> reload the page, otherwise old code would
+      // run here until the TV is restarted by hand. The reload is deferred to
+      // the transition between items so it does not stutter in the middle of a spot.
+      if (data.build) {
+        if (build === null) build = data.build;          // first poll = baseline
+        // forward only: during an outage the service worker returns a cached
+        // playlist with an old build, which is no reason to reload
+        else if (data.build > build && !reloadAt) {
+          reloadAt = Date.now() + 120000;                // at the latest in 2 min
+          err(tp('newVer'));
+        }
+      }
+      if (navigator.serviceWorker) {
+        const warm = {type: 'WARM_PLAYLIST', device: DEVICE, playlist: data,
+          urls: (data.items || []).map(it => it.url)};
+        const worker = navigator.serviceWorker.controller;
+        if (worker) worker.postMessage(warm);
+        else navigator.serviceWorker.ready.then(reg => {
+          const active = reg.active || reg.waiting;
+          if (active) active.postMessage(warm);
+        }).catch(() => {});
+      }
+      recordNew(data.items || []);
+      await measureCache(data.items || []);    // so the admin knows what is in memory (and the rotation what is ready)
+      if (!fails && !reloadAt) err('');   // keep the failure / new-version message while it lasts
+      applySettings(data.settings);
+      // refilter to visible (hidden/expired dropped)
+      allItems = data.items || [];
+      const vis = allItems.filter(isVisible).filter(isReady);
+      const changed = data.version !== version ||
+                      vis.length !== items.length ||
+                      vis.some((it, k) => !items[k] || items[k].url !== it.url);
+      // Only a finished download (same playlist): do not interrupt what is
+      // playing - it joins the rotation and comes up after the current item.
+      if (changed && data.version === version && items.length && vis.length) {
+        items = vis;
+      } else if (changed) {
+        version = data.version;
+        items = vis;
+        idx = 0;
+        fails = 0;                       // new playlist = new round
+        pending = false;
+        idle.style.display = items.length ? 'none' : 'flex';
+        if (items.length) { clearTimeout(timer); next(); }
+        else { clearTimeout(timer); }
+      }
+    } catch (e) {
+      err(tp('offline', e.message));
+      // during an outage we keep playing what we have
+    }
+  }
+
+  // ---- failure counter -----------------------------------------------------
+  // Success = the item really appeared on screen ('playing' for video,
+  // 'onload' for image). Failures are counted in a row; when a whole round
+  // fails (as many failures as there are items), the idle screen is shown and
+  // retries continue, but slowly - not in a tight loop.
+  function markOk() {
+    fails = 0;
+    pending = false;
+    showing = true;
+    lastFail = '';
+    if (items.length) idle.style.display = 'none';
+  }
+  // The service worker keeps media in CacheFirst. When a stored copy is
+  // corrupted, playback fails forever without even touching the network - the
+  // screen is dead for good and there is nothing to trace in the server log.
+  // The following two functions attack such a copy by two independent routes,
+  // because neither is enough alone.
+
+  // 1) After the second failure reach for a DIFFERENT address. A stored copy is
+  // looked up by the full URL, so an added parameter reliably misses it even
+  // when the service worker message does not arrive (after a hard reload the
+  // page is not under its control and `controller` is null).
+  function mediaSrc(it) {
+    // for a browser without H.264, bypassing the cache would only download again for nothing
+    if (fails < 2 || !canH264) {
+      // The local copy takes precedence - it plays from disk, not from the network.
+      const u = new URL(it.url, location.origin).href;
+      return copies.get(u) || it.url;
+    }
+    // After repeated failure, on the contrary, bypass the local copy; it may be faulty.
+    return it.url + (it.url.indexOf('?') < 0 ? '?' : '&') + 'retry=' + fails;
+  }
+  // 2) Tell the service worker to drop the copy - otherwise it would stay in
+  // Cache Storage and the problem would return on the next page load.
+  function dropCopy(url) {
+    if (url) {                              // do not use a faulty local copy
+      try {
+        const u = new URL(url, location.origin).href;
+        const blob = copies.get(u);
+        if (blob) { URL.revokeObjectURL(blob); copies.delete(u); }
+      } catch (_) { /* an invalid URL does not concern us */ }
+    }
+    if (!url || !navigator.serviceWorker) return;
+    const w = navigator.serviceWorker.controller;
+    if (w) w.postMessage({type: 'DROP_MEDIA', url: url});
+  }
+  function fail(why, url) {
+    fails++;
+    pending = false;
+    showing = false;
+    // A browser without H.264 does not fail on this file but on all of them.
+    // Reporting the file name is misleading - it leads to hunting for the
+    // error in the file and on the server, where there is none.
+    const codecIssue = !canH264 && /^(video|play\(\))/.test(why || '');
+    if (codecIssue) why = tp('h264why', why);
+    lastFail = why || '';
+    clearTimeout(timer);
+    if (fails >= 2 && !codecIssue) dropCopy(url);   // on the second failure suspect the cache...
+    const round = fails >= items.length;         // ...but not when the codec is to blame
+    if (round) {
+      idle.style.display = 'flex';
+      err(codecIssue ? tp('h264') : tp('cannotPlay', why || ''));
+    }
+    timer = setTimeout(next, round ? ROUND_MS : RETRY_MS);
+  }
+
+  function makeLayer(it, useFade) {
+    const layer = document.createElement('div');
+    layer.className = 'item ' + (useFade ? 'fade' : 'cut');
+    if (it.type === 'video') {
+      const v = document.createElement('video');
+      v.src = mediaSrc(it);
+      // sound only when: the client enabled it for the video (it.sound) AND it
+      // is unlocked by a gesture. Otherwise silence (autoplay then passes).
+      v.muted = !(it.sound && soundOn);
+      v.autoplay = true; v.playsInline = true;
+      v.crossOrigin = 'anonymous';
+      layer._wantSound = !!it.sound;
+      // only the current (last) layer reports - the old one throws 'error'
+      // from an empty src during cleanup and that is not an item failure
+      let ok = false, dead = false;
+      const live = () => !layer._retired && stage.lastElementChild === layer;
+      layer._bad = (why) => { if (!live() || ok || dead) return; dead = true; fail(why, it.url); };
+      v.addEventListener('playing', () => {          // only now the picture is visible
+        if (!live() || ok) return;
+        ok = true; markOk();
+        // The item duration runs from the FIRST FRAME, not from the start of the
+        // download. It used to count from element creation, so a video without
+        // faststart (the browser must download the whole file) was restarted
+        // after `seconds` and the download began from zero - an endless black screen.
+        clearTimeout(timer);
+        timer = setTimeout(next, (it.seconds || 60) * 1000);
+        // Only now, when the video is safely playing, sound without a gesture is
+        // tried. In the kiosk it works, otherwise silence stays and we wait for a touch as before.
+        if (it.sound && !soundOn) tryUnmutedWithoutGesture(v);
+      });
+      // Stall while buffering data. For an item playing from the cache it
+      // should not happen at all; when it does, the network or storage is the bottleneck.
+      v.addEventListener('waiting', () => { if (live() && ok) stalls++; });
+      v.addEventListener('timeupdate', () => { if (live()) measureSmoothness(v); });
+      v.addEventListener('ended', () => { if (live()) { measureSmoothness(v); next(); } });
+      v.addEventListener('error', () => {
+        if (!live()) return;
+        if (ok) { next(); return; }                    // after start just move on
+        const me = v.error;
+        layer._bad('video ' + (me ? 'kod' + me.code + ' ' : '') + it.url);
+      });
+      layer.appendChild(v);
+      layer._video = v;
+    } else {
+      const u = mediaSrc(it);
+      layer.style.backgroundImage = `url("${u}")`;
+      const bg = document.createElement('div');
+      bg.className = 'bg';
+      bg.style.backgroundImage = `url("${u}")`;
+      layer.appendChild(bg);
+    }
+    return layer;
+  }
+
+  // Recomputes visibility by time (schedule, date) from the last playlist.
+  // Called on the transition to the next item; poll does its own thing.
+  function refreshVisible() {
+    const vis = allItems.filter(isVisible).filter(isReady);
+    if (vis.length === items.length && vis.every((it, k) => items[k].url === it.url)) return;
+    items = vis;
+    pending = false;
+    idle.style.display = items.length ? 'none' : 'flex';
+  }
+
+  function next() {
+    clearTimeout(timer);
+    if (reloadAt) { location.reload(); return; }   // a calm moment to reload
+    refreshVisible();       // schedule: an item drops out/joins even without a new poll
+    if (!items.length) { pending = false; idle.style.display = "flex"; return; }
+    // the previous item never reported during its whole time (hanging file,
+    // undecodable image) - a black screen is a failure too
+    if (pending) { fail(tp('noResponse'), lastUrl); return; }
+    const it = items[idx % items.length];
+    idx++;
+    const my = ++seq;
+    pending = true;
+    lastUrl = it.url;
+    const previous = stage.lastElementChild;
+    const useFade = it.type === "image" && transition === "fade" && previous && !previous._video;
+    if (it.type !== "image") { present(it, false); return; }
+    // an image is always preloaded: onload = it really rendered, onerror =
+    // broken file (it used to be silently ignored, leaving a black layer on the canvas)
+    const image = new Image();
+    let ready = false;
+    const show = () => { if (!ready) { ready = true; present(it, useFade); } };
+    if (!useFade) show();                       // a cut draws immediately, the probe only measures
+    image.onload = () => { if (my !== seq) return; show(); markOk(); };
+    image.onerror = () => { if (my !== seq) return; ready = true; fail(tp('image', it.url), it.url); };
+    image.src = mediaSrc(it);
+    if (useFade) setTimeout(show, 2000);        // safety net in case loading hangs
+  }
+
+  function present(it, useFade) {
+
+    const layer = makeLayer(it, useFade);
+    if (!useFade) {
+      while (stage.firstChild) {
+        const old = stage.firstChild;
+        // Mark it before touching src: load() on an empty source throws
+        // 'error' and the layer is still lastElementChild at that moment, so
+        // the cleanup would be counted as an item failure.
+        old._retired = true;
+        if (old._video) { old._video.pause(); old._video.removeAttribute("src"); old._video.load(); }
+        stage.removeChild(old);
+      }
+    }
+    stage.appendChild(layer);
+    requestAnimationFrame(() => layer.classList.add('show'));
+
+    // remove previous layers after the cross-fade
+    while (stage.children.length > 2) stage.removeChild(stage.firstChild);
+
+    clearTimeout(timer);
+    if (it.type === 'video') {
+      // A rejected play() is a failure - except AbortError, which only means
+      // "interrupted by a new load" (common when switching items), not a fault.
+      const p = layer._video.play();
+      if (p && p.catch) p.catch(e => {
+        if (e && e.name === 'AbortError') return;
+        layer._bad('play() ' + ((e && e.name) || '?') + ' ' + it.url);
+      });
+      // until the first frame appears, a generous download deadline applies;
+      // only then it is replaced by the item duration (set by the 'playing' handler above)
+      timer = setTimeout(next, LOAD_MS);
+    } else {
+      timer = setTimeout(next, (it.seconds || 10) * 1000);
+    }
+  }
+
+  poll();
+  setInterval(poll, POLL_MS);
+  // safety net: with an empty playlist or a long spot next() may not be called
+  // for a long time, so after the deadline it reloads anyway
+  setInterval(() => { if (reloadAt && Date.now() >= reloadAt) location.reload(); }, 5000);
+
+  // check right away after wake-up/reconnect
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+})();
+</script>
+</body>
+</html>

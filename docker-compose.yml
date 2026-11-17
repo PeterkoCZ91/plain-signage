@@ -1,0 +1,49 @@
+# Signage server for local trials: docker compose up -d --build
+# Copy .env.example to .env first and set the admin login there.
+services:
+  signage:
+    build:
+      context: deploy/app
+      dockerfile: Dockerfile
+    image: signage-server:local
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      # host port : container port (the server listens on 8090 inside)
+      - "${SIGNAGE_PORT:-8080}:8090"
+    # everything in .env is passed to the container (for example SIGNAGE_TG_TOKEN,
+    # SIGNAGE_PUBLIC_URL, SIGNAGE_MAX_FILE_MB); the entries below add defaults
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # required: the admin and the write API are protected by basic auth
+      SIGNAGE_ADMIN_USER: ${SIGNAGE_ADMIN_USER:?set SIGNAGE_ADMIN_USER in .env}
+      SIGNAGE_ADMIN_PASS: ${SIGNAGE_ADMIN_PASS:?set SIGNAGE_ADMIN_PASS in .env}
+      # branding shown in the admin, the player and the QR codes
+      SIGNAGE_BRAND_NAME: ${SIGNAGE_BRAND_NAME:-Your Brand}
+      SIGNAGE_BRAND_EMAIL: ${SIGNAGE_BRAND_EMAIL:-info@example.com}
+      SIGNAGE_BRAND_PHONE: ${SIGNAGE_BRAND_PHONE:-+000 000 000 000}
+      SIGNAGE_BRAND_CITY: ${SIGNAGE_BRAND_CITY:-Your City}
+      SIGNAGE_BRAND_URL: ${SIGNAGE_BRAND_URL:-https://example.com/}
+      SIGNAGE_BRAND_QR_EMAIL: ${SIGNAGE_BRAND_QR_EMAIL:-info@example.com}
+      SIGNAGE_BRAND_PWA_TITLE: ${SIGNAGE_BRAND_PWA_TITLE:-Signage}
+    volumes:
+      # state file, uploaded media, telemetry and kiosk releases live in /data
+      - signage-data:/data
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  signage-data:
