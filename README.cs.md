@@ -70,4 +70,4 @@ bash deploy/test-backup-restore.sh             # kolečko záloha a obnova
 
 ## Licence
 
-MIT, viz [LICENSE](LICENSE). Přispívání: [CONTRIBUTING.md](CONTRIBUTING.md). Hlášení bezpečnostních chyb: [SECURITY.md](SECURITY.md). Licence použitých knihoven: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Změny: [CHANGELOG.md](CHANGELOG.md).
+Dotazy a nápady: [Discussions](https://github.com/PeterkoCZ91/plain-signage/discussions). Chyby: [nový issue](https://github.com/PeterkoCZ91/plain-signage/issues/new/choose). MIT, viz [LICENSE](LICENSE). Přispívání: [CONTRIBUTING.md](CONTRIBUTING.md). Hlášení bezpečnostních chyb: [SECURITY.md](SECURITY.md). Licence použitých knihoven: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Změny: [CHANGELOG.md](CHANGELOG.md).

@@ -70,4 +70,4 @@ bash deploy/test-backup-restore.sh             # backup and restore round trip
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md). Third-party licenses: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Changes: [CHANGELOG.md](CHANGELOG.md).
+Questions and ideas: [Discussions](https://github.com/PeterkoCZ91/plain-signage/discussions). Bugs: [open an issue](https://github.com/PeterkoCZ91/plain-signage/issues/new/choose). MIT, see [LICENSE](LICENSE). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md). Third-party licenses: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Changes: [CHANGELOG.md](CHANGELOG.md).

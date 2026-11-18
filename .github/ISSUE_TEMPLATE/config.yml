@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/PeterkoCZ91/plain-signage/discussions
+    about: Ask how to set something up or discuss an idea.
+  - name: Security vulnerability
+    url: https://github.com/PeterkoCZ91/plain-signage/security/advisories/new
+    about: Report security problems privately, not in a public issue.

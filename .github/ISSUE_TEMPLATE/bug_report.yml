@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do not paste passwords, tokens, public addresses of your server or personal data. Replace them with placeholders.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Server / API
+        - Admin page
+        - Player (browser)
+        - Android kiosk app
+        - Wi-Fi helper app
+        - Deploy scripts / Docker
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Version shown in the admin header, or the commit hash.
+      placeholder: v1.0.0
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Docker or not, host OS, browser, and for the kiosk the box model and Android version.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant lines from `docker compose logs` or the kiosk log. Remove secrets first.
+      render: text
