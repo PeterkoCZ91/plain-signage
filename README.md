@@ -46,9 +46,9 @@ The server listens on port 8080 by default; set `SIGNAGE_PORT=<port>` in `.env` 
 
 ## What is verified and what is not
 
-Verified: the server test suite, browser end-to-end tests, the player on the Xiaomi Mi TV Stick, the kiosk starting after `adb reboot` and reporting to the server, and a backup and restore round trip in a test.
+Verified: the server test suite, browser end-to-end tests, the player on the Xiaomi Mi TV Stick, the kiosk starting after `adb reboot` and reporting to the server, a backup and restore round trip in a test, the watchdog bringing the kiosk back to the foreground on an Android 12 TV, and `restore.sh` unpacking a real production backup into a separate directory, after which a server started healthy on the restored data.
 
-Not verified: a cold start of a box after unplugging power (including HDMI-CEC), a TV power cycle, the watchdog during a real network outage, `backup.sh` and `restore.sh` on a live service, and players in smart TV browsers (Tizen, webOS, Google TV). The first load of a screen needs internet; offline playback works only after the playlist has been downloaded completely. The code has not had an independent security review.
+Not verified: a cold start of a box after unplugging power (including HDMI-CEC), a TV power cycle, the watchdog during a real network outage, `restore.sh` replacing the data of a running service (the container stop and start), and players in smart TV browsers (Tizen, webOS, Google TV). The first load of a screen needs internet; offline playback works only after the playlist has been downloaded completely. The code has not had an independent security review.
 
 ## Documentation
 

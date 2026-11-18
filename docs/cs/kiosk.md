@@ -405,6 +405,9 @@ watchdogu při skutečném výpadku sítě.
 V listopadu 2026 byl postup ověřen také na čistém Philips Android TV
 (Android 12): build podle této dokumentace, instalace přes `adb` s dialogem
 Play Protect, spuštění, načtení párovací stránky, spárování z adminu, nahrání
-obrázku a jeho zobrazení a odinstalace. Stále neověřeno: kiosk jako launcher
-(`set-home-activity` a vypnutí systémového launcheru), studený start, watchdog,
-aktualizace ze serveru a Wireless debugging.
+obrázku a jeho zobrazení a odinstalace. Na stejné televizi byl ověřen i watchdog:
+po stisku Domů se kiosk sám vrátil do popředí za zhruba 20 s (řádek v logu
+`watchdog: kiosk is not in the foreground, bringing it back`), při udělené
+`SYSTEM_ALERT_WINDOW`. Stále neověřeno: kiosk jako launcher (`set-home-activity`
+a vypnutí systémového launcheru), studený start, aktualizace ze serveru a
+Wireless debugging.

@@ -46,9 +46,9 @@ Server ve výchozím stavu poslouchá na portu 8080; je-li obsazený, nastav v `
 
 ## Co je ověřené a co ne
 
-Ověřeno: testy serveru, end-to-end testy v prohlížeči, přehrávač na Xiaomi Mi TV Stick, start kiosku po `adb reboot` a jeho hlášení na server a kolečko záloha a obnova v testu.
+Ověřeno: testy serveru, end-to-end testy v prohlížeči, přehrávač na Xiaomi Mi TV Stick, start kiosku po `adb reboot` a jeho hlášení na server, kolečko záloha a obnova v testu, watchdog vracející kiosk do popředí na televizi s Androidem 12 a `restore.sh`, který rozbalil skutečnou produkční zálohu do samostatné složky, načež server nad obnovenými daty nastartoval zdravý.
 
-Neověřeno: studený start boxu po odpojení napájení (včetně HDMI-CEC), vypnutí a zapnutí TV, watchdog při skutečném výpadku sítě, `backup.sh` a `restore.sh` na běžící službě a přehrávače v prohlížečích chytrých TV (Tizen, webOS, Google TV). První načtení obrazovky potřebuje internet; offline přehrávání funguje až po úplném stažení playlistu. Kód neprošel nezávislým bezpečnostním posudkem.
+Neověřeno: studený start boxu po odpojení napájení (včetně HDMI-CEC), vypnutí a zapnutí TV, watchdog při skutečném výpadku sítě, `restore.sh` nahrazující data běžící služby (zastavení a spuštění kontejneru) a přehrávače v prohlížečích chytrých TV (Tizen, webOS, Google TV). První načtení obrazovky potřebuje internet; offline přehrávání funguje až po úplném stažení playlistu. Kód neprošel nezávislým bezpečnostním posudkem.
 
 ## Dokumentace
 

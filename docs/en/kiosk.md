@@ -410,7 +410,9 @@ cycle, and the watchdog during a real network outage.
 In November 2026 the procedure was also verified on a clean Philips Android TV
 (Android 12): build following this documentation, installation over `adb` with
 the Play Protect dialog, launch, loading of the pairing page, pairing from the
-admin, uploading an image and showing it, and uninstalling. Still not verified:
-the kiosk as the launcher (`set-home-activity` and disabling the system
-launcher), a cold start, the watchdog, updates from the server and Wireless
-debugging.
+admin, uploading an image and showing it, and uninstalling. On the same TV the
+watchdog was verified: after pressing Home the kiosk came back to the foreground
+by itself in about 20 s (log line `watchdog: kiosk is not in the foreground,
+bringing it back`), with `SYSTEM_ALERT_WINDOW` granted. Still not verified: the
+kiosk as the launcher (`set-home-activity` and disabling the system launcher), a
+cold start, updates from the server and Wireless debugging.
