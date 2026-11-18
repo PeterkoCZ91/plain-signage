@@ -131,7 +131,7 @@ Xiaomi stick, so turning the TV off does not put it to sleep.
 Network and hygiene:
 
 - Prefer Ethernet when there is a port. Put the box on its own VLAN or guest SSID with egress only to the signage server; the player needs nothing from the LAN.
-- Optional remote access: a VPN client such as Tailscale started at boot (`settings put secure always_on_vpn_app com.tailscale.ipn`, `always_on_vpn_lockdown 0`) with an ACL that lets the box reach nothing. Live view: `scrcpy -s <vpn-ip>:5555 --max-size 1280`. Expect about 40 MB of RAM for the VPN app.
+- Optional remote access over a VPN is described in [Remote access](#remote-access-optional).
 - When the work is done, turn USB debugging off and check from another host that port 5555 is closed; unauthenticated ADB on 5555 is actively abused. Keep the baseline files to compare against later.
 - Device owner plus lock task is not recommended: it needs a factory reset without any account, which loses Play and with it WebView updates.
 - Revert: `pm enable com.google.android.tvlauncher` (and other disabled packages), `uninstall app.plainsignage.kiosk`, restore the settings above.
@@ -191,6 +191,29 @@ and Wi-Fi signal in dBm, and WebView renderer crashes since the process started.
 The SSID is never read or sent. The admin shows these per screen and Telegram can
 alert on persistently low free RAM. Fields and thresholds: [api.md](api.md#box-health).
 Logic is in `Health.java`.
+
+## Remote access (optional)
+
+The first line of remote care is built in: the kiosk reports RAM, Wi-Fi signal, crashes and the last restart to the server, and the admin shows them per screen (see [Box health](#box-health)). Reach for a VPN only when you need to look at the box itself, for example to read `logcat` or see the picture.
+
+The box does not need to be reachable from the internet and should not be. Do not forward port 5555 on a router. Use a private network such as [Tailscale](https://tailscale.com) (any similar VPN works the same way):
+
+1. Install the VPN app on the box and sign in. Tag the box (for example `tag:signage-box`) so that access is decided by an ACL and not by whose account it is.
+2. Let the box accept connections but start none. With a deny-by-default ACL this means it appears only as a destination:
+
+   ```json
+   {
+     "tagOwners": { "tag:signage-box": ["autogroup:admin"] },
+     "acls": [
+       { "action": "accept", "src": ["autogroup:admin"], "dst": ["tag:signage-box:5555"] }
+     ]
+   }
+   ```
+
+3. Start the app at boot: `adb shell settings put secure always_on_vpn_app com.tailscale.ipn` and `adb shell settings put secure always_on_vpn_lockdown 0`. Lockdown stays off, so a dead VPN does not cut the box off from the signage server.
+4. Connect through the VPN address: `adb connect <vpn-ip>:5555`, live view with `scrcpy -s <vpn-ip>:5555 --max-size 1280`.
+
+Expect about 40 MB of RAM for the VPN app, which matters on a 1 GB box. This procedure is not part of the automated tests. When you are done, turn USB debugging off if you do not need it and check from another host that port 5555 is closed on the box's normal address: unauthenticated ADB on 5555 is actively abused.
 
 ## Wi-Fi helper
 

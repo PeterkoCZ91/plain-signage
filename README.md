@@ -20,7 +20,7 @@ It deliberately does not try to be a platform. There is one admin login, no user
 - Schedules each item by weekday and time range, so a lunch menu shows only at lunch.
 - Serves any number of screens from one server, each with its own playlist, name, contact and branding.
 - Pairs a new screen by a six-character code and QR code shown on the TV; you claim it in the admin from your phone. QR codes on the screen can also point to your web, Instagram or e-mail.
-- Includes an Android kiosk app that starts after a reboot, restarts when it hangs, updates itself from your server and reports RAM, Wi-Fi signal and crashes.
+- Includes an Android kiosk app that starts after a reboot, restarts when it hangs, updates itself from your server and reports RAM, Wi-Fi signal and crashes; optional remote access over a VPN is described in [docs/en/kiosk.md](docs/en/kiosk.md#remote-access-optional).
 - Keeps playing when the network drops: the player caches the playlist and media in a service worker.
 - Optional Telegram alerts for screens that go offline or show a blank picture, see [Troubleshooting](docs/en/troubleshooting.md). Backup, restore and deploy scripts are in `deploy/`.
 

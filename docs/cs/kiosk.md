@@ -130,7 +130,7 @@ vypnuté, takže vypnutí TV stick neuspí.
 Síť a hygiena:
 
 - Má-li box ethernetový port, dej přednost kabelu. Box dej do vlastní VLAN nebo hostovské SSID s odchozím provozem jen na signage server; přehrávač nic z LAN nepotřebuje.
-- Volitelný vzdálený přístup: VPN klient jako Tailscale spouštěný při bootu (`settings put secure always_on_vpn_app com.tailscale.ipn`, `always_on_vpn_lockdown 0`) s ACL, která boxu nedovolí nic dosáhnout. Živý náhled: `scrcpy -s <vpn-ip>:5555 --max-size 1280`. Počítej asi s 40 MB RAM na VPN aplikaci.
+- Volitelný vzdálený přístup přes VPN je popsán v části [Vzdálený přístup](#vzdálený-přístup-volitelný).
 - Po dokončení práce vypni ladění USB a z jiného stroje ověř, že port 5555 je zavřený; ADB bez ověření na 5555 se aktivně zneužívá. Soubory s výchozím stavem si nech k pozdějšímu porovnání.
 - Device owner s lock task se nedoporučuje: vyžaduje tovární reset bez jakéhokoli účtu, čímž se ztratí Play a s ním aktualizace WebView.
 - Návrat: `pm enable com.google.android.tvlauncher` (a další vypnuté balíčky), `uninstall app.plainsignage.kiosk`, vrácení nastavení výše.
@@ -190,6 +190,29 @@ a sílu Wi-Fi v dBm a pády rendereru WebView od startu procesu. SSID se nikdy
 nečte ani neposílá. Admin to ukazuje u obrazovky a Telegram může upozornit na
 trvale nízkou volnou RAM. Pole a prahy: [api.md](api.md#zdraví-boxu). Logika je v
 `Health.java`.
+
+## Vzdálený přístup (volitelný)
+
+První linie vzdálené péče je vestavěná: kiosk hlásí serveru RAM, signál Wi-Fi, pády a poslední restart a admin je ukazuje u každé obrazovky (viz [Zdraví boxu](#zdraví-boxu)). VPN sáhni až tehdy, když potřebuješ vidět samotný box, třeba přečíst `logcat` nebo obraz.
+
+Box nemusí být dostupný z internetu a neměl by být. Nepřesměrovávej port 5555 na routeru. Použij soukromou síť, například [Tailscale](https://tailscale.com) (podobná VPN funguje stejně):
+
+1. Nainstaluj na box VPN aplikaci a přihlas se. Box označ štítkem (třeba `tag:signage-box`), aby o přístupu rozhodovala ACL, a ne účet, pod kterým je přihlášený.
+2. Box nech přijímat spojení, ale žádná nezačínat. S ACL, která vše zakazuje, to znamená, že se objeví jen jako cíl:
+
+   ```json
+   {
+     "tagOwners": { "tag:signage-box": ["autogroup:admin"] },
+     "acls": [
+       { "action": "accept", "src": ["autogroup:admin"], "dst": ["tag:signage-box:5555"] }
+     ]
+   }
+   ```
+
+3. Spusť aplikaci při bootu: `adb shell settings put secure always_on_vpn_app com.tailscale.ipn` a `adb shell settings put secure always_on_vpn_lockdown 0`. Lockdown zůstává vypnutý, aby mrtvá VPN box neodřízla od serveru s cedulemi.
+4. Připoj se přes adresu ve VPN: `adb connect <vpn-ip>:5555`, živý náhled `scrcpy -s <vpn-ip>:5555 --max-size 1280`.
+
+Počítej asi s 40 MB RAM na VPN aplikaci, což na boxu s 1 GB paměti něco znamená. Tento postup není součástí automatických testů. Až skončíš, vypni USB ladění, pokud ho nepotřebuješ, a z jiného stroje ověř, že je port 5555 na běžné adrese boxu zavřený: ADB bez ověření na 5555 se aktivně zneužívá.
 
 ## Wi-Fi pomocník
 
