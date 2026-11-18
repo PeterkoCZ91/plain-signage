@@ -20,7 +20,7 @@ Záměrně nechce být platforma. Je jedno admin přihlášení, žádné role u
 - Plánuje každou položku podle dne v týdnu a časového rozsahu, takže polední menu se ukazuje jen v poledne.
 - Z jednoho serveru obsluhuje libovolný počet obrazovek, každá má vlastní playlist, název, kontakt a vzhled.
 - Spáruje novou obrazovku podle šestiznakového kódu a QR kódu na TV; v adminu ji převezmeš z telefonu. QR kódy na obrazovce mohou vést na tvůj web, Instagram nebo e-mail.
-- Obsahuje Android kiosk aplikaci, která startuje po restartu, restartuje se při zaseknutí, aktualizuje se ze serveru a hlásí RAM, signál Wi-Fi a pády; volitelný vzdálený přístup přes VPN je popsán v [docs/cs/kiosk.md](docs/cs/kiosk.md#vzdálený-přístup-volitelný).
+- Obsahuje Android kiosk aplikaci, která startuje po restartu, restartuje se při zaseknutí, aktualizuje se ze serveru a hlásí RAM, signál Wi-Fi a pády; VPN není potřeba; volitelný vzdálený přístup je popsán v [docs/cs/kiosk.md](docs/cs/kiosk.md#vzdálený-přístup-volitelný).
 - Hraje dál při výpadku sítě: přehrávač drží playlist a média v cache service workeru.
 - Volitelná upozornění přes Telegram na obrazovky, které jsou offline nebo ukazují prázdný obraz, viz [Řešení potíží](docs/cs/troubleshooting.md). Skripty pro zálohu, obnovu a nasazení jsou v `deploy/`.
 

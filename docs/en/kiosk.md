@@ -194,6 +194,8 @@ Logic is in `Health.java`.
 
 ## Remote access (optional)
 
+Nothing in this section is required. The server, the player and the kiosk app work without any VPN; the kiosk only needs to reach your signage server.
+
 The first line of remote care is built in: the kiosk reports RAM, Wi-Fi signal, crashes and the last restart to the server, and the admin shows them per screen (see [Box health](#box-health)). Reach for a VPN only when you need to look at the box itself, for example to read `logcat` or see the picture.
 
 The box does not need to be reachable from the internet and should not be. Do not forward port 5555 on a router. Use a private network such as [Tailscale](https://tailscale.com) (any similar VPN works the same way):

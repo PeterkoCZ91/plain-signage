@@ -193,6 +193,8 @@ trvale nízkou volnou RAM. Pole a prahy: [api.md](api.md#zdraví-boxu). Logika j
 
 ## Vzdálený přístup (volitelný)
 
+Nic z této části není povinné. Server, přehrávač i kiosk fungují bez jakékoli VPN; kiosk potřebuje jen dosáhnout na tvůj server s cedulemi.
+
 První linie vzdálené péče je vestavěná: kiosk hlásí serveru RAM, signál Wi-Fi, pády a poslední restart a admin je ukazuje u každé obrazovky (viz [Zdraví boxu](#zdraví-boxu)). VPN sáhni až tehdy, když potřebuješ vidět samotný box, třeba přečíst `logcat` nebo obraz.
 
 Box nemusí být dostupný z internetu a neměl by být. Nepřesměrovávej port 5555 na routeru. Použij soukromou síť, například [Tailscale](https://tailscale.com) (podobná VPN funguje stejně):
