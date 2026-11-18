@@ -154,6 +154,8 @@ adb -s <box-ip>:5555 shell cmd package set-home-activity app.plainsignage.kiosk/
 adb -s <box-ip>:5555 shell pm disable-user --user 0 com.google.android.tvlauncher
 ```
 
+Na boxu s Google Play může během `adb install` na TV vyskočit dialog Play Protect a příkaz čeká, dokud na něj někdo neodpoví ovladačem. Vyber možnost, která aplikaci přesto nainstaluje (je pod odkazem s dalšími podrobnostmi, přesné znění se liší podle verze). Když dialog odmítneš, `adb install` skončí chybou `INSTALL_FAILED_VERIFICATION_FAILURE`; spusť ho znovu. Vyzkoušeno na televizi Philips s Androidem 12, kde se dialog objevil při první instalaci.
+
 `set-home-activity` hlásí `Success`, ale samo nic nezmění (systémový launcher má
 prioritu 2, kiosk 0); HOME na kiosk přepne až vypnutí
 `com.google.android.tvlauncher`. Po `adb reboot` kiosk nastartuje sám: na
