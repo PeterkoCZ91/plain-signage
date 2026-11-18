@@ -61,7 +61,7 @@ test('the Czech version: strings in formal address', () => {
   assert.equal(tp('noResponse'), 'bez odezvy');
   assert.equal(tp('image', '/media/a.jpg'), 'obrázek /media/a.jpg');
   // the HTML carries the English default texts
-  assert.ok(html.includes('data-i18n="tagline">Digital content for your brand</span>'));
+  assert.ok(html.includes('data-i18n="emptyMsg">No content yet. Add photos or videos in the admin.</span>'));
   assert.ok(html.includes('data-i18n="qrIg">Follow us on Instagram</span>'));
   assert.equal(load('').LANG, 'en');
 });

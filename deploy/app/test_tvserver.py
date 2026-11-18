@@ -10,7 +10,7 @@ from tvserver import (_env_int, _container_ok, _online, _repack_reason,
                       _render_report, touch_device,
                       validate_media,
                       _range_bounds,
-                      DEFAULT_QR_EMAIL, DEFAULT_QR_URL)
+                      DEFAULT_QR_URL)
 import video_convert
 import tvserver
 
@@ -471,36 +471,44 @@ class QrCaptionTest(unittest.TestCase):
 class QrCardsTest(unittest.TestCase):
     def test_default_is_two_cards_ig_and_email(self):
         cards = qr_cards({"brand": {"url": "https://www.instagram.com/demo_brand/"}})
+        self.assertEqual([c["kind"] for c in cards], ["instagram"])
+        cards = qr_cards({"brand": {"url": "https://www.instagram.com/demo_brand/",
+                                    "qrEmail": "hello@example.org"}})
         self.assertEqual([c["kind"] for c in cards], ["instagram", "email"])
         # the logo already says the name - nothing is repeated under the IG QR
         self.assertEqual(cards[0]["handle"], "")
-        self.assertEqual(cards[1]["handle"], DEFAULT_QR_EMAIL)
+        self.assertEqual(cards[1]["handle"], "hello@example.org")
 
     def test_first_qr_can_be_disabled(self):
-        cards = qr_cards({"qr1On": False})
+        cards = qr_cards({"qr1On": False, "brand": {"qrEmail": "hello@example.org"}})
         self.assertEqual([c["kind"] for c in cards], ["email"])
 
     def test_second_qr_can_be_disabled(self):
         cards = qr_cards({"qr2On": False, "brand": {"url": "https://www.instagram.com/demo_brand/"}})
         self.assertEqual([c["kind"] for c in cards], ["instagram"])
 
+    def test_placeholder_targets_never_become_cards(self):
+        self.assertEqual(qr_cards({"qrUrl": "https://example.com/", "qrUrl2": "info@example.com"}), [])
+
     def test_both_disabled_means_no_qr(self):
         self.assertEqual(qr_cards({"qr1On": False, "qr2On": False}), [])
 
     def test_same_target_in_both_slots_merges(self):
-        cards = qr_cards({"qrUrl": DEFAULT_QR_EMAIL})
+        cards = qr_cards({"qrUrl": "hello@example.org", "brand": {"qrEmail": "hello@example.org"}})
         self.assertEqual(len(cards), 1)
         self.assertEqual(cards[0]["kind"], "email")
 
     def test_custom_second_target_overrides_default_email(self):
-        cards = qr_cards({"qrUrl2": "https://demo-brand.example"})
+        cards = qr_cards({"qrUrl": "https://www.instagram.com/demo_brand/",
+                          "qrUrl2": "https://demo-brand.example"})
         self.assertEqual(cards[1]["kind"], "web")
         self.assertEqual(cards[1]["handle"], "demo-brand.example")
 
 
 class PlaylistSettingsTest(unittest.TestCase):
     def test_default_settings(self):
-        s = playlist_settings({"qrUrl": "https://www.instagram.com/demo_brand/"})
+        s = playlist_settings({"qrUrl": "https://www.instagram.com/demo_brand/",
+                               "brand": {"qrEmail": "hello@example.org"}})
         self.assertFalse(s["qrCorner"])
         self.assertTrue(s["qr1On"])
         self.assertTrue(s["qr2On"])

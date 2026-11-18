@@ -101,6 +101,7 @@ export function loadPlayer({ fetchImpl, pathname = '/tv/', source = extractPlaye
     documentElement: Object.assign(new MockElement('html'), { clientWidth: 1920, clientHeight: 1080 }),
     getElementById: get,
     createElement: tag => new MockElement(tag),
+    createTextNode: text => ({ data: String(text), textContent: String(text) }),
     querySelector: () => null,
     addEventListener(ev, fn) { (this.listeners[ev] ||= []).push(fn); },
   };

@@ -210,3 +210,22 @@ test('the new-version message stays visible until the page reloads', async () =>
   assert.equal(p.get('err').textContent, 'new version – reloading');
   assert.equal(p.sandbox.__reloaded, 1);               // the reload happened, the message held until then
 });
+
+test('(a) unset brand (placeholders): neutral empty screen, no placeholder contact', async () => {
+  const { p } = await start(playlist([], { settings: { qrCards: [], brand: {
+    name: 'Your Brand', email: 'info@example.com', phone: '+000 000 000 000', city: 'Your City' } } }));
+  assert.equal(p.get('idle').classList.contains('empty'), true);
+  assert.equal(p.get('idle').classList.contains('noqr'), true);
+  assert.equal(p.get('footmail').textContent, '');
+  assert.equal(p.get('footrest').textContent, '');
+  assert.equal(p.get('tagline').textContent, 'No content yet. Add photos or videos in the admin.');
+  assert.ok(JSON.stringify(p.get('wordmark').children.map(c => c.textContent || c.data || '')).includes('SIGNAGE'));
+});
+
+test('(a) a set brand keeps the current screen (not the empty state)', async () => {
+  const { p } = await start(playlist([], { settings: { qrCards: [], brand: {
+    name: 'Studio X', email: 'info@example.com', phone: '+420 111', city: 'Brno', taglineEn: 'Hello' } } }));
+  assert.equal(p.get('idle').classList.contains('empty'), false);
+  assert.equal(p.get('tagline').textContent, 'Hello');
+  assert.equal(p.get('footrest').textContent, '+420 111 · Brno');
+});

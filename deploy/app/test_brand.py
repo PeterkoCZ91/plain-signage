@@ -32,9 +32,13 @@ class BrandFunctionsTest(HttpBase):
         self.assertEqual(b["city"], "Your City")
         self.assertEqual(b["name"], "Studio X")
 
-    def test_qr_cards_without_brand_are_current(self):
-        cards = tvserver.qr_cards({})
-        self.assertEqual([c["url"] for c in cards], [CURRENT_BRAND["url"], CURRENT_BRAND["qrEmail"]])
+    def test_qr_cards_without_brand_have_no_placeholder_qr(self):
+        self.assertEqual(tvserver.qr_cards({}), [])
+        self.assertEqual(tvserver.playlist_settings({})["qrCards"], [])
+
+    def test_qr_cards_real_url_with_placeholder_email(self):
+        cards = tvserver.qr_cards({"brand": {"url": "https://x.cz/"}})
+        self.assertEqual([c["url"] for c in cards], ["https://x.cz/"])
 
     def test_qr_cards_take_target_from_brand(self):
         s = {"brand": {"url": "https://example.com/x", "qrEmail": "a@example.com"}}

@@ -65,6 +65,9 @@ BRAND_MAX = {"name": 60, "email": 120, "phone": 40, "city": 80,
              "url": 500, "qrEmail": 120, "pwaTitle": 30}
 DEFAULT_QR_URL = BRAND_DEFAULTS["url"]
 DEFAULT_QR_EMAIL = BRAND_DEFAULTS["qrEmail"]
+# Built-in placeholder targets: a QR pointing at them is never shown (an unset brand
+# gets the neutral empty screen instead, see the player).
+PLACEHOLDER_QR_TARGETS = ("https://example.com/", "info@example.com", "mailto:info@example.com")
 
 
 # --- QR code target -------------------------------------------------------------
@@ -172,6 +175,8 @@ def qr_cards(settings):
         if not on:
             continue
         url = (stored or "").strip() or fallback
+        if url in PLACEHOLDER_QR_TARGETS:
+            continue
         target = qr_target(url, brand["url"])
         if target in seen:
             continue

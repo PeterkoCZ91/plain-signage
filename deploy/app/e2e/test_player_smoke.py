@@ -183,7 +183,8 @@ def test_browser_clock(page, server):
 
 def test_empty_playlist_idle_screen(page, server):
     st, res = _req(server, "/api/settings", {"device": "salon", "brand": {
-        "name": "Studio E2E", "email": "hello@example.org", "phone": "+420 111 222 333", "city": "Brno"}})
+        "name": "Studio E2E", "email": "hello@example.org", "phone": "+420 111 222 333", "city": "Brno",
+        "url": "https://studio.example.org/"}})
     assert st == 200, (st, res)
     assert files_of(server, "salon") == []
     open_player(page, server, "salon")
@@ -196,6 +197,20 @@ def test_empty_playlist_idle_screen(page, server):
     contact = page.text_content(".foot .contact")
     for part in ("hello@example.org", "+420 111 222 333", "Brno"):
         assert part in contact, f"the brand contact lacks {part!r}: {contact!r}"
+    expect_no_err(page)
+
+
+def test_unset_brand_shows_neutral_empty_screen(page, server):
+    """No items and the default (placeholder) brand: no example.com QR, no placeholder contact."""
+    assert files_of(server, "blank") == []
+    open_player(page, server, "blank", clock=None, query="?lang=en")
+    wait_shown(page, "idle")
+    assert page.text_content("#wordmark").strip() == "SIGNAGE"
+    assert "No content yet. Add photos or videos in the admin." in page.text_content("#tagline")
+    assert page.is_hidden("#idleqr"), "a placeholder QR is shown"
+    text = page.text_content("#idle")
+    for bad in ("example.com", "+000", "Your City", "YOUR BRAND"):
+        assert bad not in text, f"placeholder {bad!r} on the empty screen: {text!r}"
     expect_no_err(page)
 
 
@@ -429,14 +444,14 @@ def test_screen_is_online_in_api_devices(page, server):
 
 def test_lang_switches_the_idle_screen_texts(page, server):
     open_player(page, server, "lang", clock=None, query="?lang=en")
-    tag_en = page.text_content("[data-i18n=tagline]")
+    tag_en = page.text_content("[data-i18n=emptyMsg]")
     assert page.evaluate("() => document.documentElement.lang") == "en"
-    assert "brand" in tag_en.lower() and "Digitální" not in tag_en, tag_en
+    assert "No content yet" in tag_en, tag_en
 
     open_player(page, server, "lang", clock=None, query="?lang=cs")
-    tag_cs = page.text_content("[data-i18n=tagline]")
+    tag_cs = page.text_content("[data-i18n=emptyMsg]")
     assert page.evaluate("() => document.documentElement.lang") == "cs"
-    assert "Digitální" in tag_cs and tag_cs != tag_en, tag_cs
+    assert "Zatím žádný obsah" in tag_cs and tag_cs != tag_en, tag_cs
 
 
 def test_lang_translates_the_qr_label(page, server):

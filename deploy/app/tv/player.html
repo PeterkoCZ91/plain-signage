@@ -268,12 +268,12 @@
 </head>
 <body>
 <div id="stage"></div>
-<div id="idle">
+<div id="idle" class="noqr empty">
   <div class="frame"></div>
   <div class="idlecol">
     <div class="zone">
-      <div class="brand" id="wordmark"><span class="p1"></span>YOUR BRAND</div>
-      <div class="tagline"><span id="tagline" data-i18n="tagline">Digital content for your brand</span><span class="rule"></span></div>
+      <div class="brand" id="wordmark"><span class="p1"></span>SIGNAGE</div>
+      <div class="tagline"><span id="tagline" data-i18n="emptyMsg">No content yet. Add photos or videos in the admin.</span><span class="rule"></span></div>
     </div>
     <div class="zone" id="qrzone">
       <div class="qrpair">
@@ -291,7 +291,7 @@
     </div>
   </div>
   <div class="foot">
-    <div class="contact"><span id="footmail">info@example.com · </span><span id="footrest">+000 000 000 000 · Your City</span></div>
+    <div class="contact"><span id="footmail"></span><span id="footrest"></span></div>
   </div>
 </div>
 <div id="qrcorner"><img id="cornerqr" src="/assets/default-qr.png" alt="QR"></div>
@@ -308,6 +308,7 @@
     cs: {
       title: 'Přehrávač',
       tagline: 'Digitální obsah pro vaši značku',
+      emptyMsg: 'Zatím žádný obsah. Přidejte fotky nebo videa v administraci.',
       qrEmail: 'Napište nám',
       qrIg: 'Sledujte nás na Instagramu',
       qrWeb: 'Víc najdete tady',
@@ -324,6 +325,7 @@
     en: {
       title: 'Player',
       tagline: 'Digital content for your brand',
+      emptyMsg: 'No content yet. Add photos or videos in the admin.',
       qrEmail: 'Write to us',
       qrIg: 'Follow us on Instagram',
       qrWeb: 'Find more here',
@@ -638,14 +640,20 @@
     // without a brand (old server) the static default text from the HTML stays
     const br = s && s.brand;
     if (br && typeof br === 'object') {
+      // unset brand = the server's built-in placeholders: neutral empty screen
+      // (wordmark "SIGNAGE", one sentence, no placeholder contact)
+      const PH = {name: 'Your Brand', email: 'info@example.com', phone: '+000 000 000 000', city: 'Your City'};
+      const real = k => (br[k] && br[k] !== PH[k]) ? String(br[k]) : '';
+      const unset = !real('name') && !br.wordmark && !br.taglineCs && !br.taglineEn;
+      idle.classList.toggle('empty', unset);
       const fmb = document.getElementById('footmail');
-      if (fmb) fmb.textContent = String(br.email || '') + ' · ';
+      if (fmb) fmb.textContent = real('email') ? real('email') + ' · ' : '';
       const fr = document.getElementById('footrest');
-      if (fr) fr.textContent = [br.phone, br.city].filter(Boolean).join(' · ');
+      if (fr) fr.textContent = [real('phone'), real('city')].filter(Boolean).join(' · ');
       // wordmark "LEAD|REST" (LEAD in bold) and tagline from the brand; without
       // them the name in capitals / the built-in neutral text stays
       const wm = document.getElementById('wordmark');
-      const word = String(br.wordmark || br.name || '').toUpperCase();
+      const word = unset ? 'SIGNAGE' : String(br.wordmark || br.name || '').toUpperCase();
       if (wm && word) {
         const cut = word.indexOf('|');
         const lead = cut < 0 ? '' : word.slice(0, cut);
@@ -659,7 +667,7 @@
       }
       const tg = document.getElementById('tagline');
       const tagText = LANG === 'cs' ? (br.taglineCs || br.taglineEn) : (br.taglineEn || br.taglineCs);
-      if (tg && tagText) tg.textContent = String(tagText);
+      if (tg) tg.textContent = unset ? tp('emptyMsg') : String(tagText || tp('tagline'));
     }
     // e-mail either under the QR or in the footer - never twice on the screen
     const fm = document.getElementById('footmail');
