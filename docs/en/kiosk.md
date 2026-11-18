@@ -194,6 +194,12 @@ adb -s <box-ip>:5555 shell pm disable-user --user 0 com.google.android.tvlaunche
 
 On a box with Google Play, Play Protect may open a dialog on the TV during `adb install` and the command waits until someone answers it with the remote. Choose the option that installs the app anyway (it is under the more-details link; the wording differs by version). If it is rejected, `adb install` fails with `INSTALL_FAILED_VERIFICATION_FAILURE`; run it again. Tested on a Philips Android 12 TV, where the dialog appeared on the first install.
 
+The dialog comes from Google Play (`com.android.vending`) and appears because the app is not from the Play Store and has no reputation there. Publishing the APK elsewhere does not change that, and every build is a different file anyway because the server address is compiled in. Ways to avoid answering it:
+
+- Answer it once per install. This is the only way tested here.
+- Turn off app scanning in the Play Store settings on the box (Play Protect, scan apps). Not tested here; the menu wording differs between versions.
+- Use a box without Google Play, or one where Play is disabled (`adb shell pm disable-user --user 0 com.android.vending`). Then nothing asks. Not tested here, and without Play the system WebView is not updated automatically, see [Preparing a box](#preparing-a-box).
+
 `set-home-activity` reports `Success` but does nothing on its own (the system
 launcher has priority 2, the kiosk 0); disabling `com.google.android.tvlauncher`
 is what makes HOME resolve to the kiosk. After `adb reboot` the kiosk starts
