@@ -7,6 +7,15 @@ playback box (package `app.plainsignage.kiosk`, version 1.0, `versionCode` 1). I
 was built and tested on a Mecool KM9 Pro (Android 10) and a Xiaomi Mi TV Stick
 (Android 9). Every command below runs over ADB against `<box-ip>:5555`.
 
+## Before you start
+
+- A running server reachable over HTTPS at `<host>`, with a certificate that Android trusts. The Compose quick start serves plain HTTP on port 8080, which the kiosk cannot use (see [Build](#build)); TLS is set up in front of the server as described in [Production deployment](install.md#production-deployment).
+- An Android box or stick (Android 9 or newer) on the same LAN as your computer for the install.
+- A computer with JDK 17, the Android SDK (platform `android-34`, build-tools, platform-tools for `adb`) and `zip`. No prebuilt APK is published: the repository has no release that carries one, and the server address is compiled into the app, so you build your own APK once per server.
+- ADB (Android Debug Bridge) enabled on the box, see [Preparing a box](#preparing-a-box). Optional: [scrcpy](#remote-access-optional) to see the box's screen on your computer.
+
+Order of work: build the APK, prepare the box, install the APK, pair the box, run the [Quick check](#quick-check).
+
 The apps carry the package names `app.plainsignage.kiosk` and `app.plainsignage.wifi`. A box that runs an earlier private build under the old package name needs an uninstall and a fresh install, because Android treats a different package as a different app.
 
 Why not just a browser: after a power cut browsers do not start (no
@@ -19,10 +28,28 @@ retries a failed load every 5 s growing to 60 s.
 ## Build
 
 No gradle and no dependencies: `aapt2 -> javac -> d8 -> zipalign -> apksigner`,
-see `kiosk-app/build.sh`. You need the Android SDK (platform `android-34`,
-override with `API=`) and `aapt2 javac d8 zipalign apksigner keytool` on `PATH`.
-The SDK is looked up in `ANDROID_HOME`, `ANDROID_SDK_ROOT`, then `~/Android/Sdk`.
-Use JDK 17: `d8` currently crashes under JDK 21.
+see `kiosk-app/build.sh`. You need JDK 17 (it provides `javac` and `keytool`),
+`zip`, and the Android SDK with platform `android-34` (override with `API=`),
+a build-tools package (`aapt2`, `d8`, `zipalign`, `apksigner`) and
+platform-tools (`adb`, needed to install). The SDK is looked up in
+`ANDROID_HOME`, `ANDROID_SDK_ROOT`, then `~/Android/Sdk`. Use JDK 17: `d8`
+currently crashes under JDK 21.
+
+The script stops if `aapt2 javac d8 zipalign apksigner keytool` is not on
+`PATH`, but it does not add the SDK's `build-tools/<version>` directory to
+`PATH` for you, and it does not check for `zip`, which it calls in step 4. Put
+the tools on `PATH` first, for example (the SDK's `sdkmanager` installs the
+packages; `<version>` is the installed build-tools version, such as `34.0.0`):
+
+```bash
+export ANDROID_HOME=~/Android/Sdk
+export PATH="$ANDROID_HOME/build-tools/<version>:$ANDROID_HOME/platform-tools:$PATH"
+"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;<version>" "platform-tools"
+```
+
+There is no prebuilt APK to download. The service address is compiled into the
+APK and the app refuses every other host, so an APK belongs to one server; a new
+address needs a new build.
 
 ```bash
 cd kiosk-app
@@ -31,13 +58,26 @@ KIOSK_ADB=<box-ip>:5555 KIOSK_BASE_URL=https://<host> ./build.sh install   # bui
 ```
 
 - `KIOSK_BASE_URL` is required and must be `https://`; there is no default, so an
-  APK is never built against a wrong server by accident. The allowed host is
-  derived from it.
+  APK is never built against a wrong server by accident. The allowed host and
+  port are derived from it (for example `https://signage.example.com`). Plain
+  HTTP is not supported at all: the manifest disables cleartext traffic and the
+  address allowlist rejects `http://`. The app does not override certificate
+  errors, so Android's default applies: a self-signed or expired certificate, or
+  a certificate for another name, means the page does not load and the box keeps
+  retrying. Use a certificate from a public CA (for example Let's Encrypt) for
+  that exact host, and check that the box's date and time are right.
+- `build.sh install` only runs `adb connect` and `adb install -r`. The
+  permissions and launcher steps in [Preparing a box](#preparing-a-box) are still
+  needed.
 - The signing key `kiosk-app/kiosk.keystore` is created on first build and stays
   local (in `.gitignore`). Back it up: a box refuses an update signed with another
   key, and the only way out is `adb uninstall app.plainsignage.kiosk`. The
   password is generated on the first build into `kiosk.keystore.pass` (or taken
-  from `KIOSK_KS_PASS`): back it up together with the keystore.
+  from `KIOSK_KS_PASS`): back it up together with the keystore. If the keystore
+  or its password is lost there is no recovery: delete both files, build with a
+  new key, and on every box run `adb uninstall app.plainsignage.kiosk`, install
+  again, repeat the `appops` commands and pair the box again. Updates from the
+  server do not work across keys.
 - To be accepted as an update, raise `versionCode` and `versionName` in
   `kiosk-app/AndroidManifest.xml`.
 
@@ -58,8 +98,16 @@ WebView from Play. The Mecool has 2 GB RAM, an Ethernet port, and a vendor OTA
 package that is a dead update channel. Look for Android 9 or newer with Google
 Play, at least 1 GB RAM, network ADB and a remote with OK and BACK.
 
+Find `<box-ip>` in the box's network settings (details of the Wi-Fi or Ethernet
+connection) or in your router's list of clients; a fixed lease in the router
+keeps it from changing.
+
 Enable ADB (Settings, Device Preferences, About, select Build 7 times, then
-Developer options, USB debugging) with the box and computer on the same LAN:
+Developer options, USB debugging) with the box and computer on the same LAN.
+Network ADB on port 5555 exists only if the box offers it: some boxes show
+only USB debugging, and Android 11 and newer have Wireless debugging with its
+own port and `adb pair` (not tested here). If `adb connect` is refused, look for
+a network ADB option in Developer options.
 
 ```bash
 adb connect <box-ip>:5555        # confirm the key fingerprint on the TV ("Always allow")
@@ -67,9 +115,11 @@ adb devices                      # <box-ip>:5555   device
 ```
 
 On the Mecool network ADB disappears after a restart, so do the whole install in
-one session; on the Xiaomi stick port 5555 survives. A USB-A to USB-A cable into
-the OTG port is the fallback, but a plain A-A cable joins the 5 V rails of both
-devices.
+one session; on the Xiaomi stick port 5555 survives. If it disappears, switch
+USB debugging off and on in Developer options and run `adb connect` again (not
+checked on every box). The installed kiosk runs without ADB; ADB is needed only
+for setup and maintenance. A USB-A to USB-A cable into the OTG (USB host) port is
+the fallback, but a plain A-A cable joins the 5 V rails of both devices.
 
 Disable vendor telemetry, store, assistant, screensaver and updater packages
 (reversible), after taking a baseline:
@@ -84,7 +134,8 @@ Keep Google Play: it is the only thing that updates WebView. Once WebView is
 current you may disable Play (`pm disable-user --user 0 com.android.vending`)
 to save RAM and avoid surprises, at the price that WebView is then updated only
 by hand (re-enable Play, update, disable it again).
- Package state is
+
+Package state is
 written to disk with a delay, so wait about 40 seconds after changing packages
 before `adb reboot`, or the change can be lost. On the Mecool,
 `pm disable-user --user 0 com.droidlogic.vsota` removes the dead OTA channel.
@@ -93,7 +144,9 @@ WebView: the stock WebView 81 on the Xiaomi stick left the player black (CSS
 `inset` needs Chrome 87). Sign in to Play with a dedicated account and update
 "Android System WebView" (138 was installed there; the Mecool had 150).
 
-Install the kiosk and make it the launcher:
+Install the kiosk and make it the launcher (run from the repository root after
+the [build](#build); if you used `build.sh install`, the `install` line is already
+done):
 
 ```bash
 adb -s <box-ip>:5555 install -r kiosk-app/build/signage-kiosk.apk
@@ -134,7 +187,7 @@ Network and hygiene:
 - Optional remote access over a VPN is described in [Remote access](#remote-access-optional).
 - When the work is done, turn USB debugging off and check from another host that port 5555 is closed; unauthenticated ADB on 5555 is actively abused. Keep the baseline files to compare against later.
 - Device owner plus lock task is not recommended: it needs a factory reset without any account, which loses Play and with it WebView updates.
-- Revert: `pm enable com.google.android.tvlauncher` (and other disabled packages), `uninstall app.plainsignage.kiosk`, restore the settings above.
+- Revert: `pm enable com.google.android.tvlauncher` and every other package you disabled (`adb shell pm list packages -d` lists the disabled ones; `packages-before.txt` is your baseline), `adb uninstall app.plainsignage.kiosk`, and put back the settings changed above (the Mecool's original values are listed there; the steps do not save the original values of other boxes, so read them with `adb shell settings get <namespace> <key>` before you change them). A factory reset in the box's own Settings is the last resort; it removes everything, including the WebView update.
 
 ## First run and pairing
 
@@ -143,17 +196,41 @@ adb -s <box-ip>:5555 shell appops get app.plainsignage.kiosk SYSTEM_ALERT_WINDOW
 adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity
 ```
 
-Without a stored address the app opens `<KIOSK_BASE_URL>/connect`, which shows a
-six-character code valid for 10 minutes and a QR code to the admin
-(`https://<host>/admin?pair=<CODE>`). Open the screen the box belongs to and
-click **Connect TV**. On its next poll the box moves to `/tv/<screen>`, stores
-that address and starts on it after boot. Without pairing, start with the
-address; the app accepts only `https://` and exactly its own host:
+Without a stored address the app opens `<KIOSK_BASE_URL>/connect`. The TV shows
+the heading "Connect this TV in the admin panel", a QR code, a six-character
+code and "The code is valid for 10 min." (in Czech or English, with CS and EN
+buttons). If the page does not load, the box retries every 5 s growing to 60 s;
+see the Quick check for causes. To pair:
+
+1. Scan the QR code with a phone. It opens `https://<host>/admin?pair=<CODE>`;
+   log in with the admin credentials. If you cannot scan, type that address by
+   hand: the admin has no field for entering the code.
+2. The admin shows a green bar "Connect a new TV with code <CODE> to screen
+   <name>". The screen is the one last used in that browser; to choose another,
+   open `https://<host>/admin?pair=<CODE>&device=<screen>`.
+3. Click **Connect TV**. On its next poll the box moves to `/tv/<screen>`, stores
+   that address and starts on it after boot.
+
+The QR code is built from the request headers or from `SIGNAGE_PUBLIC_URL`; if it
+points to `http://` or a wrong host, set `SIGNAGE_PUBLIC_URL=https://<host>` on
+the server. An expired code is replaced by a new one when the app is started
+again (`am start` above). Without pairing, start with the address; the app
+accepts only `https://` and exactly its own host:
 
 ```bash
 adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity \
   -d "https://<host>/tv/<screen>"
 ```
+
+## Quick check
+
+1. Server: `curl -s https://<host>/api/health` from your computer returns `"ok": true` without `-k`. If curl complains about the certificate, the box will too.
+2. Install: `adb -s <box-ip>:5555 shell pm list packages | grep app.plainsignage` lists `app.plainsignage.kiosk`.
+3. Picture: after pairing the TV plays the screen's playlist. In the admin the screen shows as online within about 45 s, with the kiosk version.
+4. Logs, if not: `adb -s <box-ip>:5555 logcat -d -s SignageKiosk` (rejected addresses and their reason). A blank or retrying screen is usually a certificate the box does not trust, a wrong `KIOSK_BASE_URL`, no route from the box to `<host>`, or a wrong date on the box.
+5. Boot: `adb -s <box-ip>:5555 reboot`; the kiosk should return to the content on its own after about one to two minutes. A cold start after unplugging power is not verified (see the end of this page).
+
+When done, turn USB debugging off (see Network and hygiene above).
 
 ## Operation
 
@@ -168,6 +245,8 @@ adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity \
 The app asks `GET /api/kiosk/release` once a minute. It updates
 only when an admin requests it for the screen, or once after the box powers on
 (within 10 minutes of boot).
+
+Prerequisite: the box already runs a kiosk installed over ADB; the server only updates an existing one. The publish script works over SSH on the host layout from [Production deployment](install.md#production-deployment) (`$SIGNAGE_REMOTE_ROOT/data/kiosk`, in the container `/data/kiosk`, the same as `SIGNAGE_KIOSK_DIR`); for a Compose setup the script does not apply, and the files it would write are shown by `--dry-run`.
 
 1. Build the new APK with a higher `versionCode` and the same keystore.
 2. Publish it (verifies the APK, writes `signage-kiosk.apk` and `kiosk.json`, never lowers the version without `--force`; uses `SIGNAGE_SSH_ALIAS` and `SIGNAGE_REMOTE_ROOT` like `deploy.sh`):
@@ -213,7 +292,7 @@ The box does not need to be reachable from the internet and should not be. Do no
    ```
 
 3. Start the app at boot: `adb shell settings put secure always_on_vpn_app com.tailscale.ipn` and `adb shell settings put secure always_on_vpn_lockdown 0`. Lockdown stays off, so a dead VPN does not cut the box off from the signage server.
-4. Connect through the VPN address: `adb connect <vpn-ip>:5555`, live view with `scrcpy -s <vpn-ip>:5555 --max-size 1280`.
+4. Connect through the VPN address: `adb connect <vpn-ip>:5555`, live view with `scrcpy -s <vpn-ip>:5555 --max-size 1280` (scrcpy is a separate tool for your computer; install it from your package manager or its project page).
 
 Expect about 40 MB of RAM for the VPN app, which matters on a 1 GB box. This procedure is not part of the automated tests. When you are done, turn USB debugging off if you do not need it and check from another host that port 5555 is closed on the box's normal address: unauthenticated ADB on 5555 is actively abused.
 

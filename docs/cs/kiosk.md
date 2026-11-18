@@ -7,6 +7,15 @@ přehrávací box (balíček `app.plainsignage.kiosk`, verze 1.0, `versionCode` 
 Vznikl a ověřil se na Mecool KM9 Pro (Android 10) a Xiaomi Mi TV Stick
 (Android 9). Všechny příkazy níže běží přes ADB proti `<box-ip>:5555`.
 
+## Než začneš
+
+- Běžící server dostupný přes HTTPS na `<host>` s certifikátem, kterému Android věří. Rychlý start s Compose obsluhuje prosté HTTP na portu 8080, které kiosk použít nemůže (viz [Build](#build)); TLS se řeší před serverem podle části [Produkční nasazení](install.md#produkční-nasazení).
+- Android box nebo stick (Android 9 nebo novější) ve stejné LAN jako tvůj počítač po dobu instalace.
+- Počítač s JDK 17, Android SDK (platforma `android-34`, build-tools, platform-tools kvůli `adb`) a `zip`. Hotové APK se nepublikuje: repozitář nemá žádné vydání, které by ho obsahovalo, a adresa serveru se zkompiluje do aplikace, takže si APK sestavíš sám, jednou pro každý server.
+- ADB (Android Debug Bridge) zapnuté na boxu, viz [Příprava boxu](#příprava-boxu). Volitelně [scrcpy](#vzdálený-přístup-volitelný) pro zobrazení obrazovky boxu v počítači.
+
+Pořadí práce: sestavit APK, připravit box, nainstalovat APK, spárovat box, projít [Rychlou kontrolu](#rychlá-kontrola).
+
 Aplikace nesou názvy balíčků `app.plainsignage.kiosk` a `app.plainsignage.wifi`. Box s dřívější neveřejnou verzí pod starým názvem balíčku vyžaduje odinstalaci a novou instalaci, protože Android bere jiný balíček jako jinou aplikaci.
 
 Proč ne prostý prohlížeč: po výpadku proudu prohlížeče nenastartují (nemají
@@ -19,10 +28,27 @@ neúspěšné načtení opakuje každých 5 s s růstem až na 60 s.
 ## Build
 
 Žádný gradle a žádné závislosti: `aapt2 -> javac -> d8 -> zipalign -> apksigner`,
-viz `kiosk-app/build.sh`. Potřebuješ Android SDK (platforma `android-34`,
-přepíše se přes `API=`) a v `PATH` `aapt2 javac d8 zipalign apksigner keytool`.
-SDK se hledá v `ANDROID_HOME`, `ANDROID_SDK_ROOT`, pak `~/Android/Sdk`.
-Použij JDK 17: `d8` zatím padá pod JDK 21.
+viz `kiosk-app/build.sh`. Potřebuješ JDK 17 (poskytuje `javac` a `keytool`),
+`zip` a Android SDK s platformou `android-34` (přepíše se přes `API=`),
+balíčkem build-tools (`aapt2`, `d8`, `zipalign`, `apksigner`) a platform-tools
+(`adb`, potřeba k instalaci). SDK se hledá v `ANDROID_HOME`, `ANDROID_SDK_ROOT`,
+pak `~/Android/Sdk`. Použij JDK 17: `d8` zatím padá pod JDK 21.
+
+Skript skončí chybou, pokud v `PATH` chybí `aapt2 javac d8 zipalign apksigner
+keytool`, ale adresář `build-tools/<verze>` z SDK do `PATH` nepřidá a nekontroluje
+`zip`, který volá v kroku 4. Nástroje proto nejdřív dej do `PATH`, například
+(balíčky nainstaluje `sdkmanager` ze SDK; `<verze>` je nainstalovaná verze
+build-tools, třeba `34.0.0`):
+
+```bash
+export ANDROID_HOME=~/Android/Sdk
+export PATH="$ANDROID_HOME/build-tools/<verze>:$ANDROID_HOME/platform-tools:$PATH"
+"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;<verze>" "platform-tools"
+```
+
+Hotové APK ke stažení není. Adresa služby se zkompiluje do APK a aplikace
+odmítne každý jiný host, takže APK patří k jednomu serveru; nová adresa
+vyžaduje nový build.
 
 ```bash
 cd kiosk-app
@@ -31,13 +57,25 @@ KIOSK_ADB=<box-ip>:5555 KIOSK_BASE_URL=https://<host> ./build.sh install   # ses
 ```
 
 - `KIOSK_BASE_URL` je povinná a musí být `https://`; výchozí hodnota není, takže
-  APK nikdy omylem nevznikne proti špatnému serveru. Povolený host se odvozuje z ní.
+  APK nikdy omylem nevznikne proti špatnému serveru. Povolený host a port se
+  odvozují z ní (například `https://signage.example.com`). Prosté HTTP nejde
+  vůbec: manifest vypíná nešifrovaný provoz a allowlist adres `http://`
+  odmítne. Aplikace chyby certifikátu nepřebíjí, platí tedy výchozí chování
+  Androidu: self-signed nebo prošlý certifikát či certifikát pro jiné jméno
+  znamená, že se stránka nenačte a box to dokola zkouší. Použij certifikát od
+  veřejné CA (například Let's Encrypt) přesně pro daný host a zkontroluj datum
+  a čas na boxu.
+- `build.sh install` jen spustí `adb connect` a `adb install -r`. Kroky s
+  oprávněními a launcherem z [Přípravy boxu](#příprava-boxu) jsou dál potřeba.
 - Podpisový klíč `kiosk-app/kiosk.keystore` se vytvoří při prvním buildu a
   zůstává lokální (je v `.gitignore`). Zálohuj ho: box odmítne aktualizaci
   podepsanou jiným klíčem a jediná cesta ven je `adb uninstall app.plainsignage.kiosk`.
   Heslo se při
   prvním buildu vygeneruje do `kiosk.keystore.pass` (nebo se vezme z `KIOSK_KS_PASS`):
-  zálohuj ho spolu s keystore.
+  zálohuj ho spolu s keystore. Když se keystore nebo jeho heslo ztratí, nejde
+  nic obnovit: smaž oba soubory, sestav s novým klíčem a na každém boxu spusť
+  `adb uninstall app.plainsignage.kiosk`, nainstaluj znovu, zopakuj příkazy
+  `appops` a box znovu spáruj. Aktualizace ze serveru přes hranici klíčů nefungují.
 - Aby se APK přijalo jako aktualizace, zvyš `versionCode` a `versionName` v
   `kiosk-app/AndroidManifest.xml`.
 
@@ -58,8 +96,16 @@ z Play. Mecool má 2 GB RAM, ethernetový port a vendor OTA balíček, který je
 mrtvý aktualizační kanál. Hledej Android 9 nebo novější s Google Play, aspoň
 1 GB RAM, síťové ADB a ovladač s tlačítky OK a BACK.
 
+Najdi `<box-ip>` v nastavení sítě boxu (podrobnosti připojení Wi-Fi nebo
+Ethernet) nebo v seznamu klientů na routeru; pevná adresa z routeru zabrání její
+změně.
+
 Zapni ADB (Nastavení, Předvolby zařízení, Informace, vyber 7x Sestavení, pak
-Možnosti pro vývojáře, Ladění USB), box i počítač musí být ve stejné LAN:
+Možnosti pro vývojáře, Ladění USB), box i počítač musí být ve stejné LAN.
+Síťové ADB na portu 5555 existuje jen tehdy, když ho box nabízí: některé boxy
+ukazují jen USB ladění a Android 11 a novější má Bezdrátové ladění s vlastním
+portem a `adb pair` (zde netestováno). Když `adb connect` odmítne spojení,
+hledej v Možnostech pro vývojáře volbu síťového ADB.
 
 ```bash
 adb connect <box-ip>:5555        # potvrď otisk klíče na TV ("Vždy povolit")
@@ -67,8 +113,11 @@ adb devices                      # <box-ip>:5555   device
 ```
 
 Na Mecoolu síťové ADB po restartu zmizí, takže celou instalaci udělej v jedné
-relaci; na Xiaomi sticku port 5555 restart přežije. Záložní cesta je kabel USB-A
-na USB-A do OTG portu, ale obyčejný A-A kabel spojí 5V větve obou zařízení.
+relaci; na Xiaomi sticku port 5555 restart přežije. Když zmizí, vypni a zapni
+ladění USB v Možnostech pro vývojáře a znovu spusť `adb connect` (neověřeno na
+každém boxu). Nainstalovaný kiosk běží i bez ADB; ADB je potřeba jen k nastavení
+a údržbě. Záložní cesta je kabel USB-A na USB-A do OTG portu (USB host), ale
+obyčejný A-A kabel spojí 5V větve obou zařízení.
 
 Vypni vendor telemetrii, obchod, asistenta, spořiče a aktualizační balíčky
 (vratně), po uložení výchozího stavu:
@@ -83,7 +132,8 @@ Google Play nech: je to jediné, co aktualizuje WebView. Až je WebView aktuáln
 lze Play vypnout (`pm disable-user --user 0 com.android.vending`), což šetří RAM
 a předchází překvapením; cenou je, že WebView se pak aktualizuje jen ručně
 (Play zapnout, aktualizovat, znovu vypnout).
- Stav balíčků se na disk
+
+Stav balíčků se na disk
 zapisuje se zpožděním, takže po změně balíčků počkej asi 40 sekund před
 `adb reboot`, jinak se změna může ztratit. Na Mecoolu odstraní mrtvý OTA kanál
 `pm disable-user --user 0 com.droidlogic.vsota`.
@@ -92,7 +142,9 @@ WebView: původní WebView 81 na Xiaomi sticku nechal přehrávač černý (CSS 
 potřebuje Chrome 87). Přihlas se do Play vyhrazeným účtem a aktualizuj „Android
 System WebView“ (tam šlo o verzi 138; Mecool měl 150).
 
-Nainstaluj kiosk a nastav ho jako launcher:
+Nainstaluj kiosk a nastav ho jako launcher (spusť z kořene repozitáře po
+[buildu](#build); pokud jsi použil `build.sh install`, řádek `install` je už
+hotový):
 
 ```bash
 adb -s <box-ip>:5555 install -r kiosk-app/build/signage-kiosk.apk
@@ -133,7 +185,7 @@ Síť a hygiena:
 - Volitelný vzdálený přístup přes VPN je popsán v části [Vzdálený přístup](#vzdálený-přístup-volitelný).
 - Po dokončení práce vypni ladění USB a z jiného stroje ověř, že port 5555 je zavřený; ADB bez ověření na 5555 se aktivně zneužívá. Soubory s výchozím stavem si nech k pozdějšímu porovnání.
 - Device owner s lock task se nedoporučuje: vyžaduje tovární reset bez jakéhokoli účtu, čímž se ztratí Play a s ním aktualizace WebView.
-- Návrat: `pm enable com.google.android.tvlauncher` (a další vypnuté balíčky), `uninstall app.plainsignage.kiosk`, vrácení nastavení výše.
+- Návrat: `pm enable com.google.android.tvlauncher` a každý další vypnutý balíček (`adb shell pm list packages -d` vypíše vypnuté; `packages-before.txt` je tvůj výchozí stav), `adb uninstall app.plainsignage.kiosk` a vrácení nastavení změněných výše (původní hodnoty Mecoolu jsou uvedené výše; u jiných boxů je kroky neukládají, proto si je před změnou přečti přes `adb shell settings get <namespace> <key>`). Tovární reset v nastavení boxu je poslední možnost; smaže vše, včetně aktualizace WebView.
 
 ## První spuštění a párování
 
@@ -142,17 +194,40 @@ adb -s <box-ip>:5555 shell appops get app.plainsignage.kiosk SYSTEM_ALERT_WINDOW
 adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity
 ```
 
-Bez uložené adresy aplikace otevře `<KIOSK_BASE_URL>/connect`, kde je
-šestiznakový kód platný 10 minut a QR kód do adminu
-(`https://<host>/admin?pair=<CODE>`). Otevři obrazovku, ke které box patří, a
-klikni na **Připojit TV**. Při dalším pollu box přejde na `/tv/<screen>`, adresu
-uloží a po bootu na ní startuje. Bez párování spusť s adresou; aplikace přijme
-jen `https://` a přesně svůj host:
+Bez uložené adresy aplikace otevře `<KIOSK_BASE_URL>/connect`. TV ukáže
+nadpis „Připoj tuto TV v administraci“, QR kód, šestiznakový kód a „Kód platí
+10 min.“ (česky nebo anglicky, s tlačítky CS a EN). Když se stránka nenačte, box
+to opakuje každých 5 s s růstem až na 60 s; příčiny jsou v Rychlé kontrole.
+Párování:
+
+1. Naskenuj QR kód telefonem. Otevře `https://<host>/admin?pair=<CODE>`;
+   přihlas se údaji admina. Když skenovat nejde, napiš tu adresu ručně: admin
+   nemá pole pro zadání kódu.
+2. Admin ukáže zelený pruh „Připojit novou TV s kódem <CODE> k obrazovce
+   <název>“. Obrazovka je ta, kterou jsi v daném prohlížeči naposledy použil;
+   jinou vybereš adresou `https://<host>/admin?pair=<CODE>&device=<screen>`.
+3. Klikni na **Připojit TV**. Při dalším pollu box přejde na `/tv/<screen>`, adresu
+   uloží a po bootu na ní startuje.
+
+QR kód se skládá z hlaviček požadavku nebo z `SIGNAGE_PUBLIC_URL`; když míří na
+`http://` nebo na špatný host, nastav na serveru `SIGNAGE_PUBLIC_URL=https://<host>`.
+Prošlý kód se při novém spuštění aplikace (`am start` výše) nahradí novým. Bez
+párování spusť s adresou; aplikace přijme jen `https://` a přesně svůj host:
 
 ```bash
 adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity \
   -d "https://<host>/tv/<screen>"
 ```
+
+## Rychlá kontrola
+
+1. Server: `curl -s https://<host>/api/health` z tvého počítače vrátí `"ok": true` bez `-k`. Když si curl stěžuje na certifikát, bude i box.
+2. Instalace: `adb -s <box-ip>:5555 shell pm list packages | grep app.plainsignage` vypíše `app.plainsignage.kiosk`.
+3. Obraz: po spárování TV přehrává playlist obrazovky. V adminu je obrazovka do asi 45 s online a má verzi kiosku.
+4. Logy, když ne: `adb -s <box-ip>:5555 logcat -d -s SignageKiosk` (odmítnuté adresy a důvod). Prázdná nebo opakující se obrazovka je obvykle certifikát, kterému box nevěří, špatná `KIOSK_BASE_URL`, chybějící cesta z boxu na `<host>` nebo špatné datum na boxu.
+5. Boot: `adb -s <box-ip>:5555 reboot`; kiosk se má sám vrátit k obsahu asi za jednu až dvě minuty. Studený start po vytažení napájení není ověřený (viz konec stránky).
+
+Až skončíš, vypni ladění USB (viz Síť a hygiena výše).
 
 ## Provoz
 
@@ -167,6 +242,8 @@ adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity \
 Aplikace se jednou za minutu ptá na `GET /api/kiosk/release`.
 Aktualizuje se jen na požadavek admina pro danou obrazovku, nebo jednou po
 zapnutí boxu (do 10 minut po bootu).
+
+Předpoklad: box už má kiosk nainstalovaný přes ADB; server aktualizuje jen existující. Publikační skript pracuje přes SSH s rozložením hostitele z části [Produkční nasazení](install.md#produkční-nasazení) (`$SIGNAGE_REMOTE_ROOT/data/kiosk`, v kontejneru `/data/kiosk`, stejné jako `SIGNAGE_KIOSK_DIR`); pro Compose se skript nehodí a soubory, které by zapsal, ukáže `--dry-run`.
 
 1. Sestav nové APK s vyšším `versionCode` a stejným keystore.
 2. Publikuj ho (ověří APK, zapíše `signage-kiosk.apk` a `kiosk.json`, bez `--force` nikdy nesníží verzi; používá `SIGNAGE_SSH_ALIAS` a `SIGNAGE_REMOTE_ROOT` jako `deploy.sh`):
@@ -212,7 +289,7 @@ Box nemusí být dostupný z internetu a neměl by být. Nepřesměrovávej port
    ```
 
 3. Spusť aplikaci při bootu: `adb shell settings put secure always_on_vpn_app com.tailscale.ipn` a `adb shell settings put secure always_on_vpn_lockdown 0`. Lockdown zůstává vypnutý, aby mrtvá VPN box neodřízla od serveru s cedulemi.
-4. Připoj se přes adresu ve VPN: `adb connect <vpn-ip>:5555`, živý náhled `scrcpy -s <vpn-ip>:5555 --max-size 1280`.
+4. Připoj se přes adresu ve VPN: `adb connect <vpn-ip>:5555`, živý náhled `scrcpy -s <vpn-ip>:5555 --max-size 1280` (scrcpy je samostatný nástroj pro tvůj počítač; nainstaluj ho z balíčků distribuce nebo ze stránky projektu).
 
 Počítej asi s 40 MB RAM na VPN aplikaci, což na boxu s 1 GB paměti něco znamená. Tento postup není součástí automatických testů. Až skončíš, vypni USB ladění, pokud ho nepotřebuješ, a z jiného stroje ověř, že je port 5555 na běžné adrese boxu zavřený: ADB bez ověření na 5555 se aktivně zneužívá.
 

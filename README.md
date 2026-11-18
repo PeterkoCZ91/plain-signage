@@ -40,7 +40,7 @@ The server listens on port 8080 by default; set `SIGNAGE_PORT=<port>` in `.env` 
 2. A screen is one playlist with its own address, one per TV. Add it with **+ New screen** and give it a label; it gets a name such as `lobby-1a2b3c4d5e6f`.
 3. Upload a few images or videos to the screen.
 4. Open `http://localhost:8080/tv/<screen>`, with the screen's name from the admin, in a browser on the TV or any computer.
-5. To use an Android box instead of a browser, install the kiosk app and pair it: the box shows a code and QR, and you click **Connect TV** on the screen in the admin. Details are in [docs/en/kiosk.md](docs/en/kiosk.md#first-run-and-pairing). For real use put the server behind HTTPS ([installation](docs/en/install.md)).
+5. To use an Android box instead of a browser, build the kiosk app and pair it. There is no prebuilt APK, and the app works only against an HTTPS server with a certificate Android trusts (plain `http://localhost:8080` is not enough), so put the server behind HTTPS first ([installation](docs/en/install.md#production-deployment)). Then follow [Before you start](docs/en/kiosk.md#before-you-start): you build the APK with JDK 17 and the Android SDK, install it over ADB, and the box shows a code and QR; scan it and click **Connect TV** in the admin ([pairing](docs/en/kiosk.md#first-run-and-pairing), [Quick check](docs/en/kiosk.md#quick-check)).
 
 ## What is verified and what is not
 

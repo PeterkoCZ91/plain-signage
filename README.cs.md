@@ -40,7 +40,7 @@ Server ve výchozím stavu poslouchá na portu 8080; je-li obsazený, nastav v `
 2. Obrazovka je jeden playlist s vlastní adresou, jedna na každou TV. Přidej ji přes **+ Nová obrazovka** a zadej popisek; dostane název např. `lobby-1a2b3c4d5e6f`.
 3. Nahraj do obrazovky pár obrázků nebo videí.
 4. Otevři `http://localhost:8080/tv/<screen>`, kde `<screen>` je název obrazovky z adminu, v prohlížeči na TV nebo na počítači.
-5. Chceš-li místo prohlížeče Android box, nainstaluj kiosk aplikaci a spáruj ji: box ukáže kód a QR a v adminu u obrazovky klikneš na **Připojit TV**. Podrobnosti v [docs/cs/kiosk.md](docs/cs/kiosk.md#první-spuštění-a-párování). Pro ostrý provoz dej server za HTTPS ([instalace](docs/cs/install.md)).
+5. Chceš-li místo prohlížeče Android box, sestav kiosk aplikaci a spáruj ji. Hotové APK není a aplikace funguje jen proti HTTPS serveru s certifikátem, kterému Android věří (prosté `http://localhost:8080` nestačí), proto nejdřív dej server za HTTPS ([instalace](docs/cs/install.md#produkční-nasazení)). Pak postupuj podle části [Než začneš](docs/cs/kiosk.md#než-začneš): APK sestavíš s JDK 17 a Android SDK, nainstaluješ přes ADB a box ukáže kód a QR; naskenuj ho a v adminu klikni na **Připojit TV** ([párování](docs/cs/kiosk.md#první-spuštění-a-párování), [Rychlá kontrola](docs/cs/kiosk.md#rychlá-kontrola)).
 
 ## Co je ověřené a co ne
 
