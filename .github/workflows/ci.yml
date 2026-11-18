@@ -56,6 +56,8 @@ jobs:
           javac -d "$T" $S/Watchdog.java test/WatchdogTest.java && java -cp "$T" $P.WatchdogTest
           javac -d "$T" $S/UpdatePolicy.java test/UpdatePolicyTest.java && java -cp "$T" $P.UpdatePolicyTest
           javac -d "$T" $S/Health.java test/HealthTest.java && java -cp "$T" $P.HealthTest
+          javac -d "$T" $S/LoadError.java test/LoadErrorTest.java && java -cp "$T" $P.LoadErrorTest
+          javac -d "$T" $S/Diag.java test/DiagTest.java && java -cp "$T" $P.DiagTest
 
   js:
     runs-on: ubuntu-latest

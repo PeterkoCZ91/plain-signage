@@ -87,7 +87,8 @@ Tests are plain Java without Android and are not part of the APK:
 cd kiosk-app
 T=$(mktemp -d)
 javac -d "$T" src/app/plainsignage/kiosk/Allowlist.java test/AllowlistTest.java && java -cp "$T" app.plainsignage.kiosk.AllowlistTest
-# the same pattern for WatchdogTest, UpdatePolicyTest (+ UpdatePolicy.java) and HealthTest (+ Health.java)
+# the same pattern for WatchdogTest, UpdatePolicyTest (+ UpdatePolicy.java), HealthTest (+ Health.java),
+# LoadErrorTest (+ LoadError.java) and DiagTest (+ Diag.java)
 ```
 
 ### Trying it at home without a domain
@@ -268,6 +269,18 @@ adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity \
 5. Boot: `adb -s <box-ip>:5555 reboot`; the kiosk should return to the content on its own after about one to two minutes. A cold start after unplugging power is not verified (see the end of this page).
 
 When done, turn USB debugging off (see Network and hygiene above).
+
+### Status screen and diagnostics
+
+When the main page cannot be loaded, the kiosk covers the WebView with a status screen (same style as the update prompt): the reason (certificate or SSL, server not responding or timed out, no network or name not resolved, HTTP 5xx), the server host, the box's IP address and a countdown to the next attempt (5, 10, 20, 40, then 60 s). It disappears when the page loads. The kiosk never accepts an untrusted certificate: the request is always cancelled and the screen only tells you why and keeps retrying. Certificate reasons: expired, not valid yet, issued for a different host, untrusted authority, invalid date. Most of them also say to check the date and time on the box, because a wrong clock (typical after a power outage on a box without a battery clock) makes a valid certificate look expired or untrusted.
+
+At start the kiosk writes one line to the log (`adb logcat -d -s SignageKiosk`): version, server host and whether a screen is saved (only its `/tv/<name>` path).
+
+For a technician with ADB, an overview for 15 s (version, server host, saved screen, last error, RAM, network and Wi-Fi signal, renderer crashes, age of the last loaded page):
+
+```bash
+adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity --ez diag true
+```
 
 ## Operation
 

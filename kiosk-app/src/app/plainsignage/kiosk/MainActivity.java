@@ -1,6 +1,7 @@
 package app.plainsignage.kiosk;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -71,6 +72,9 @@ public class MainActivity extends Activity {
     private static final String PREF_KEY_LAST_RESTART = "lastRestart";
     /** Boolean intent extra for an ADB preview of the update prompt. */
     private static final String EXTRA_PROMPT_PREVIEW = "prompt_preview";
+    /** Boolean intent extra: am start ... --ez diag true shows the diagnostics overview. */
+    private static final String EXTRA_DIAG = "diag";
+    private static final long DIAG_OVERVIEW_MS = 15000;
     /** JS global the player reads to detect the kiosk (player.html). */
     private static final String JS_GLOBAL_KIOSK = "window.__kiosk";
 
@@ -90,6 +94,17 @@ public class MainActivity extends Activity {
     private Runnable retryRunnable;
     private long firstBack;
     private String lastError = "—";
+    /** Wall-clock time of the last page that loaded without an error (0 = none since start). */
+    private long lastPageOkMs;
+    /** Status screen shown over the WebView when the main page cannot be loaded. */
+    private FrameLayout loadError;
+    private TextView loadReason;
+    private TextView loadServer;
+    private TextView loadBox;
+    private TextView loadRetry;
+    private Runnable loadCountdown;
+    private long retryAt;
+    private Runnable hideDiagnostics;
     /** Written by the main thread, also read by the updater thread (box health). */
     private volatile int crashCount;
     private BroadcastReceiver networkReceiver;
@@ -138,6 +153,9 @@ public class MainActivity extends Activity {
             }
         }
 
+        // One log line per start: no token or query, the screen only as its /tv/<name> path.
+        Log.i(TAG, Diag.startLine(appVersion(), BASE_URL, prefs.getString(PREF_KEY_URL, null)));
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         root = new FrameLayout(this);
@@ -149,6 +167,9 @@ public class MainActivity extends Activity {
         hideSystemBars();
         startWatchdog();
         startUpdater();
+        if (wantsDiag(launchIntent)) {
+            showDiagOverview();
+        }
     }
 
     // --- host allowlist -----------------------------------------------------
@@ -276,6 +297,8 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView v, String loadedUrl) {
                 if (!pageFailed) {
                     retryCount = 0;          // success: backoff from the start
+                    lastPageOkMs = System.currentTimeMillis();
+                    hideLoadError();
                     rememberScreen(loadedUrl);
                 }
                 v.evaluateJavascript(
@@ -287,6 +310,26 @@ public class MainActivity extends Activity {
                 lastError = getString(R.string.err_load, code, description);
                 pageFailed = true;
                 scheduleRetry();
+                showLoadError(LoadError.classify(code, isOnline()), 0, null);
+            }
+
+            /**
+             * A certificate error is reported here, not in onReceivedError. The
+             * request is ALWAYS cancelled (never proceed): an untrusted certificate
+             * is not accepted. We only show why and keep retrying, because the cause
+             * is often the box's own clock after a power outage.
+             */
+            @Override
+            public void onReceivedSslError(WebView v, android.webkit.SslErrorHandler h,
+                                           android.net.http.SslError error) {
+                h.cancel();
+                int primary = error.getPrimaryError();
+                LoadError.SslReason reason = LoadError.classifySsl(primary);
+                lastError = getString(R.string.err_load, primary, "SSL " + reason);
+                Log.w(TAG, "certificate rejected: " + reason);
+                pageFailed = true;
+                scheduleRetry();
+                showLoadError(LoadError.Kind.CERTIFICATE, 0, reason);
             }
 
             /** A 5xx of the main page (server/proxy restart) is retried with backoff. */
@@ -297,6 +340,8 @@ public class MainActivity extends Activity {
                     lastError = "HTTP " + response.getStatusCode();
                     pageFailed = true;
                     scheduleRetry();
+                    showLoadError(LoadError.classifyHttp(response.getStatusCode()),
+                            response.getStatusCode(), null);
                 }
             }
 
@@ -334,6 +379,7 @@ public class MainActivity extends Activity {
         retryPending = true;
         long delay = Math.min(RETRY_BASE_MS << Math.min(retryCount, 4), RETRY_MAX_MS);
         retryCount++;
+        retryAt = SystemClock.elapsedRealtime() + delay;
         retryRunnable = new Runnable() {
             @Override
             public void run() {
@@ -415,6 +461,7 @@ public class MainActivity extends Activity {
             }
             retryPending = false;
             retryCount = 0;
+            retryAt = 0;
             web.loadUrl(url);
         }
     }
@@ -435,7 +482,7 @@ public class MainActivity extends Activity {
     private void prepareDiagnostics() {
         diagnostics = new TextView(this);
         diagnostics.setTextColor(0xFFE3C47C);
-        diagnostics.setBackgroundColor(0xCC000000);
+        diagnostics.setBackgroundColor(0xFF08080A);
         diagnostics.setPadding(28, 24, 28, 24);
         diagnostics.setTextSize(16f);
         diagnostics.setVisibility(View.GONE);
@@ -473,12 +520,88 @@ public class MainActivity extends Activity {
         t.append('\n').append(getString(R.string.diag_hint));
         diagnostics.setText(t.toString());
         diagnostics.setVisibility(View.VISIBLE);
-        handler.postDelayed(new Runnable() {
+        scheduleHideDiagnostics(DIAGNOSTICS_MS);
+    }
+
+    private void scheduleHideDiagnostics(long ms) {
+        if (hideDiagnostics != null) {
+            handler.removeCallbacks(hideDiagnostics);
+        }
+        hideDiagnostics = new Runnable() {
             @Override
             public void run() {
                 diagnostics.setVisibility(View.GONE);
             }
-        }, DIAGNOSTICS_MS);
+        };
+        handler.postDelayed(hideDiagnostics, ms);
+    }
+
+    private boolean wantsDiag(Intent it) {
+        return it != null && it.getBooleanExtra(EXTRA_DIAG, false);
+    }
+
+    /**
+     * Overview for 15 s over ADB (changes nothing, catches no keys):
+     * am start -n app.plainsignage.kiosk/.MainActivity --ez diag true
+     * The values come from what the kiosk already keeps: Health helpers (RAM,
+     * network, signal), crashCount, lastError and the time of the last good load.
+     */
+    private void showDiagOverview() {
+        StringBuilder t = new StringBuilder();
+        t.append(getString(R.string.dv_title)).append("\n\n");
+        t.append(getString(R.string.dv_version, appVersion())).append('\n');
+        t.append(getString(R.string.dv_server, Diag.hostOf(BASE_URL))).append('\n');
+        String path = Diag.screenPath(prefs.getString(PREF_KEY_URL, null));
+        t.append(path == null ? getString(R.string.dv_screen_none)
+                : getString(R.string.dv_screen_saved, path)).append('\n');
+        t.append(getString(R.string.dv_last_error, lastError)).append('\n');
+        try {
+            ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) {
+                ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+                am.getMemoryInfo(mi);
+                t.append(getString(R.string.dv_ram, Health.toMb(mi.availMem),
+                        Health.toMb(mi.totalMem),
+                        mi.lowMemory ? getString(R.string.dv_ram_low) : "")).append('\n');
+            }
+        } catch (Exception e) {
+            Log.i(TAG, "diag: RAM unavailable: " + e.getClass().getSimpleName());
+        }
+        t.append(getString(R.string.dv_net, networkSummary())).append('\n');
+        t.append(getString(R.string.dv_crashes, crashCount)).append('\n');
+        t.append(lastPageOkMs == 0 ? getString(R.string.dv_last_ok_never)
+                : getString(R.string.dv_last_ok,
+                        Diag.age(System.currentTimeMillis() - lastPageOkMs))).append('\n');
+        diagnostics.setText(t.toString());
+        diagnostics.setVisibility(View.VISIBLE);
+        diagnostics.bringToFront();
+        scheduleHideDiagnostics(DIAG_OVERVIEW_MS);
+    }
+
+    /** Network type and Wi-Fi signal (the SSID is neither read nor shown). */
+    private String networkSummary() {
+        try {
+            ConnectivityManager cm =
+                    (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
+            if (ni == null || !ni.isConnected()) {
+                return getString(R.string.dv_net_none);
+            }
+            boolean wifi = ni.getType() == ConnectivityManager.TYPE_WIFI;
+            String type = Health.networkType(wifi, ni.getType() == ConnectivityManager.TYPE_ETHERNET);
+            if (Health.NET_WIFI.equals(type)) {
+                android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
+                        getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                android.net.wifi.WifiInfo wi = wm == null ? null : wm.getConnectionInfo();
+                int rssi = wi == null ? Health.INVALID_RSSI : wi.getRssi();
+                return Health.isValidRssi(rssi) ? getString(R.string.dv_net_wifi, rssi)
+                        : getString(R.string.dv_net_wifi_unknown);
+            }
+            return Health.NET_ETH.equals(type) ? getString(R.string.dv_net_eth)
+                    : getString(R.string.dv_net_other);
+        } catch (Exception e) {
+            return getString(R.string.unknown);
+        }
     }
 
     private boolean isLauncher() {
@@ -650,6 +773,10 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent it) {
         super.onNewIntent(it);
         if (previewPrompt(it)) {
+            return;
+        }
+        if (wantsDiag(it)) {
+            showDiagOverview();
             return;
         }
         // The app is singleTask, so a new screen assignment arrives here.
@@ -847,6 +974,133 @@ public class MainActivity extends Activity {
         }
         if (prompt != null) {
             prompt.setVisibility(View.GONE);
+        }
+    }
+
+    // --- status screen for a failed page load ---------------------------------
+
+    private void buildLoadError() {
+        loadError = new FrameLayout(this);
+        loadError.setBackgroundColor(0xF208080A);
+        loadError.setClickable(true);         // a touch does not reach the page
+
+        android.widget.LinearLayout column = new android.widget.LinearLayout(this);
+        column.setOrientation(android.widget.LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        TextView eyebrow = text(18, 0xFFC9A24D, false);
+        eyebrow.setText(R.string.load_eyebrow);
+        eyebrow.setLetterSpacing(0.18f);
+        loadReason = text(40, CREAM, true);
+        loadReason.setPadding(0, 24, 0, 36);
+        loadServer = text(24, GOLD, false);
+        loadBox = text(24, GOLD, false);
+        loadBox.setPadding(0, 8, 0, 0);
+        loadRetry = text(28, CREAM, true);
+        loadRetry.setPadding(0, 36, 0, 0);
+        TextView hint = text(18, GREY, false);
+        hint.setText(R.string.load_hint);
+        hint.setPadding(0, 28, 0, 0);
+
+        column.addView(eyebrow);
+        column.addView(loadReason);
+        column.addView(loadServer);
+        column.addView(loadBox);
+        column.addView(loadRetry);
+        column.addView(hint);
+        column.setPadding(80, 0, 80, 0);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.gravity = Gravity.CENTER;
+        loadError.addView(column, lp);
+        loadError.setVisibility(View.GONE);
+        root.addView(loadError, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    /** IPv4 address of this box for the status screen (shown on the TV only, never logged). */
+    private String boxAddress() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> ifs =
+                    java.net.NetworkInterface.getNetworkInterfaces();
+            while (ifs != null && ifs.hasMoreElements()) {
+                java.net.NetworkInterface ni = ifs.nextElement();
+                if (!ni.isUp() || ni.isLoopback()) {
+                    continue;
+                }
+                java.util.Enumeration<java.net.InetAddress> addrs = ni.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    java.net.InetAddress ad = addrs.nextElement();
+                    if (ad instanceof java.net.Inet4Address && !ad.isLoopbackAddress()) {
+                        return ad.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // falls through to "unknown"
+        }
+        return getString(R.string.unknown);
+    }
+
+    private void showLoadError(LoadError.Kind kind, int httpStatus, LoadError.SslReason ssl) {
+        if (loadError == null) {
+            buildLoadError();
+        }
+        int res;
+        switch (kind) {
+            case CERTIFICATE: res = R.string.load_certificate; break;
+            case SERVER_UNREACHABLE: res = R.string.load_server_unreachable; break;
+            case NETWORK: res = R.string.load_network; break;
+            case SERVER_ERROR: res = R.string.load_http; break;
+            default: res = R.string.load_other; break;
+        }
+        if (ssl != null) {
+            switch (ssl) {
+                case EXPIRED: res = R.string.ssl_expired; break;
+                case NOT_YET_VALID: res = R.string.ssl_not_yet_valid; break;
+                case HOST_MISMATCH: res = R.string.ssl_host_mismatch; break;
+                case UNTRUSTED: res = R.string.ssl_untrusted; break;
+                case DATE_INVALID: res = R.string.ssl_date_invalid; break;
+                default: res = R.string.ssl_other; break;
+            }
+        }
+        loadReason.setText(kind == LoadError.Kind.SERVER_ERROR
+                ? getString(res, httpStatus) : getString(res));
+        loadServer.setText(getString(R.string.load_server, Diag.hostOf(BASE_URL)));
+        loadBox.setText(getString(R.string.load_box_ip, boxAddress()));
+        loadError.setVisibility(View.VISIBLE);
+        loadError.bringToFront();
+        if (prompt != null && prompt.getVisibility() == View.VISIBLE) {
+            prompt.bringToFront();            // the update prompt stays on top
+        }
+        if (diagnostics.getVisibility() == View.VISIBLE) {
+            diagnostics.bringToFront();
+        }
+        if (loadCountdown != null) {
+            handler.removeCallbacks(loadCountdown);
+        }
+        loadCountdown = new Runnable() {
+            @Override
+            public void run() {
+                long left = retryPending
+                        ? LoadError.secondsLeft(SystemClock.elapsedRealtime(), retryAt) : 0;
+                loadRetry.setText(left > 0
+                        ? getString(R.string.load_retry_in, LoadError.countdown(left))
+                        : getString(R.string.load_retry_now));
+                if (loadError.getVisibility() == View.VISIBLE) {
+                    handler.postDelayed(this, 1000);
+                }
+            }
+        };
+        loadCountdown.run();
+    }
+
+    private void hideLoadError() {
+        if (loadCountdown != null) {
+            handler.removeCallbacks(loadCountdown);
+        }
+        if (loadError != null) {
+            loadError.setVisibility(View.GONE);
         }
     }
 

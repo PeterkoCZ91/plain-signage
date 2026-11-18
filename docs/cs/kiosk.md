@@ -85,7 +85,8 @@ Testy jsou v čisté Javě bez Androidu a nejsou součástí APK:
 cd kiosk-app
 T=$(mktemp -d)
 javac -d "$T" src/app/plainsignage/kiosk/Allowlist.java test/AllowlistTest.java && java -cp "$T" app.plainsignage.kiosk.AllowlistTest
-# stejně pro WatchdogTest, UpdatePolicyTest (+ UpdatePolicy.java) a HealthTest (+ Health.java)
+# stejně pro WatchdogTest, UpdatePolicyTest (+ UpdatePolicy.java), HealthTest (+ Health.java),
+# LoadErrorTest (+ LoadError.java) a DiagTest (+ Diag.java)
 ```
 
 ### Zkouška doma bez vlastní domény
@@ -264,6 +265,18 @@ adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity \
 5. Boot: `adb -s <box-ip>:5555 reboot`; kiosk se má sám vrátit k obsahu asi za jednu až dvě minuty. Studený start po vytažení napájení není ověřený (viz konec stránky).
 
 Až skončíš, vypni ladění USB (viz Síť a hygiena výše).
+
+### Stavová obrazovka a diagnostika
+
+Když se hlavní stránka nedá načíst, kiosk přes WebView ukáže stavovou obrazovku (stejný styl jako výzva k aktualizaci): důvod (certifikát nebo SSL, server neodpovídá nebo vypršel limit, bez sítě nebo nepřeložené jméno, HTTP 5xx), host serveru, IP adresu boxu a odpočet do dalšího pokusu (5, 10, 20, 40, pak 60 s). Zmizí, jakmile se stránka načte. Kiosk nikdy nepřijme nedůvěryhodný certifikát: požadavek se vždy zruší a obrazovka jen ukáže důvod a dál zkouší znovu. Důvody certifikátu: vypršel, ještě není platný, vydán pro jiný host, nedůvěryhodná autorita, neplatné datum. Většina z nich radí zkontrolovat datum a čas na boxu, protože špatné hodiny (typicky po výpadku proudu na boxu bez záložních hodin) udělají z platného certifikátu vypršelý nebo nedůvěryhodný.
+
+Při startu kiosk zapíše do logu jeden řádek (`adb logcat -d -s SignageKiosk`): verze, host serveru a zda je uložená obrazovka (jen její cesta `/tv/<name>`).
+
+Pro technika s ADB je tu na 15 s přehled (verze, host serveru, uložená obrazovka, poslední chyba, RAM, síť a signál Wi-Fi, pády rendereru, stáří poslední načtené stránky):
+
+```bash
+adb -s <box-ip>:5555 shell am start -n app.plainsignage.kiosk/.MainActivity --ez diag true
+```
 
 ## Provoz
 

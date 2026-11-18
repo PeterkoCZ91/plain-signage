@@ -66,7 +66,7 @@ shellcheck -S warning deploy/*.sh deploy/tools/*.sh kiosk-app/build.sh wifi-app/
 bash deploy/test-backup-restore.sh             # kolečko záloha a obnova
 ```
 
-- Aplikace kiosku: obyčejné Java testy bez Androidu, příkazy v [docs/cs/kiosk.md](docs/cs/kiosk.md#build) (`AllowlistTest`, `WatchdogTest`, `UpdatePolicyTest`, `HealthTest`).
+- Aplikace kiosku: obyčejné Java testy bez Androidu, příkazy v [docs/cs/kiosk.md](docs/cs/kiosk.md#build) (`AllowlistTest`, `WatchdogTest`, `UpdatePolicyTest`, `HealthTest`, `LoadErrorTest`, `DiagTest`).
 - E2E v pravém prohlížeči (`pip install playwright segno`, `playwright install chromium`, `ffmpeg` pro test videa): `(cd deploy/app && python3 -m pytest e2e -q)`; bez `playwright` se přeskočí. Viz [deploy/app/e2e/README.md](deploy/app/e2e/README.md).
 - Na Pythonu 3.13 a novějším se 4 testy shody parseru multipart přeskočí, protože modul `cgi` už neexistuje; je to v pořádku.
 

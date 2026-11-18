@@ -66,7 +66,7 @@ shellcheck -S warning deploy/*.sh deploy/tools/*.sh kiosk-app/build.sh wifi-app/
 bash deploy/test-backup-restore.sh             # backup and restore round trip
 ```
 
-- Kiosk app: plain Java tests without Android, commands in [docs/en/kiosk.md](docs/en/kiosk.md#build) (`AllowlistTest`, `WatchdogTest`, `UpdatePolicyTest`, `HealthTest`).
+- Kiosk app: plain Java tests without Android, commands in [docs/en/kiosk.md](docs/en/kiosk.md#build) (`AllowlistTest`, `WatchdogTest`, `UpdatePolicyTest`, `HealthTest`, `LoadErrorTest`, `DiagTest`).
 - E2E in a real browser (`pip install playwright segno`, `playwright install chromium`, `ffmpeg` for the video test): `(cd deploy/app && python3 -m pytest e2e -q)`; without `playwright` they are skipped. See [deploy/app/e2e/README.md](deploy/app/e2e/README.md).
 - On Python 3.13 and newer the 4 multipart parity tests are skipped because the `cgi` module is gone; this is expected.
 
