@@ -88,6 +88,40 @@ javac -d "$T" src/app/plainsignage/kiosk/Allowlist.java test/AllowlistTest.java 
 # stejně pro WatchdogTest, UpdatePolicyTest (+ UpdatePolicy.java) a HealthTest (+ Health.java)
 ```
 
+### Zkouška doma bez vlastní domény
+
+Kiosk potřebuje `https://` s certifikátem veřejné CA, takže zkouška v domácí síti
+bez vlastní domény je nepohodlná. Čistě na zkoušku lze použít wildcard DNS
+službu, která certifikát zveřejňuje ke stažení: `local-ip.sh` přeloží host
+například `192-168-1-10.local-ip.sh` na LAN adresu `192.168.1.10` a certifikát
+s klíčem ze stránky [local-ip.sh](https://local-ip.sh) platí pro toto jméno.
+Dej je do nginx před server (cesty k certifikátu jsou zástupné):
+
+```nginx
+server {
+    listen 9443 ssl;
+    server_name 192-168-1-10.local-ip.sh;
+    ssl_certificate     /etc/nginx/local-ip/server.pem;
+    ssl_certificate_key /etc/nginx/local-ip/server.key;
+    client_max_body_size 110m;
+    location / {
+        proxy_pass http://<ip-serveru>:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+```
+
+Na serveru pak nastav `SIGNAGE_PUBLIC_URL=https://192-168-1-10.local-ip.sh:9443`
+a aplikaci sestav s `KIOSK_BASE_URL=https://192-168-1-10.local-ip.sh:9443`
+(v obou stejný host i port). Takto to bylo ověřeno na Philips Android TV.
+
+Soukromý klíč tohoto certifikátu je veřejný, takže se za tento host může
+vydávat kdokoli. Použij to jen na zkoušku s demo daty a nikdy pro reálný provoz.
+Pro reálný provoz je vlastní doména a Let's Encrypt, viz
+[Produkční nasazení](install.md#produkční-nasazení).
+
 ## Příprava boxu
 
 Postup je pro oba boxy stejný. Xiaomi stick je 32bitový s 1 GB RAM (po bootu
@@ -348,3 +382,10 @@ a do zhruba 60 s se ohlásí serveru; síťové ADB na testovacím boxu restart
 přežilo. Neověřeno: studený start po odpojení napájení (před nechráněným
 provozem ho vyzkoušej fyzicky, včetně HDMI-CEC), vypnutí a zapnutí TV a chování
 watchdogu při skutečném výpadku sítě.
+
+V listopadu 2026 byl postup ověřen také na čistém Philips Android TV
+(Android 12): build podle této dokumentace, instalace přes `adb` s dialogem
+Play Protect, spuštění, načtení párovací stránky, spárování z adminu, nahrání
+obrázku a jeho zobrazení a odinstalace. Stále neověřeno: kiosk jako launcher
+(`set-home-activity` a vypnutí systémového launcheru), studený start, watchdog,
+aktualizace ze serveru a Wireless debugging.

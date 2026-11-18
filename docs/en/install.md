@@ -193,6 +193,11 @@ Prepare the host once:
    }
    ```
 
+   For a trial in a home network without your own domain, see
+   [Trying it at home without a domain](kiosk.md#trying-it-at-home-without-a-domain)
+   (public private key, demo data only). Real operation needs your own domain
+   and a certificate such as Let's Encrypt.
+
    Old panels that cannot do HTTPS need a plain HTTP server on port 80 with the
    same `proxy_pass`. A new `limit_req_zone` is not picked up by
    `nginx -s reload`; restart nginx.

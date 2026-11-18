@@ -90,6 +90,41 @@ javac -d "$T" src/app/plainsignage/kiosk/Allowlist.java test/AllowlistTest.java 
 # the same pattern for WatchdogTest, UpdatePolicyTest (+ UpdatePolicy.java) and HealthTest (+ Health.java)
 ```
 
+### Trying it at home without a domain
+
+The kiosk needs `https://` with a certificate from a public CA, so a trial in a
+home network without your own domain is awkward. For a trial only, you can use a
+wildcard DNS service that publishes a certificate for download:
+`local-ip.sh` resolves a host such as `192-168-1-10.local-ip.sh` to the LAN
+address `192.168.1.10`, and the certificate and key offered on the
+[local-ip.sh](https://local-ip.sh) page are valid for that name. Put them in
+nginx in front of the server (the certificate paths are placeholders):
+
+```nginx
+server {
+    listen 9443 ssl;
+    server_name 192-168-1-10.local-ip.sh;
+    ssl_certificate     /etc/nginx/local-ip/server.pem;
+    ssl_certificate_key /etc/nginx/local-ip/server.key;
+    client_max_body_size 110m;
+    location / {
+        proxy_pass http://<server-ip>:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+```
+
+Then set `SIGNAGE_PUBLIC_URL=https://192-168-1-10.local-ip.sh:9443` on the
+server and build the app with `KIOSK_BASE_URL=https://192-168-1-10.local-ip.sh:9443`
+(same host and port in both). This was verified on a Philips Android TV.
+
+The private key of that certificate is public, so anyone can impersonate the
+host. Use it only for a trial with demo data and never for real operation. For
+real operation use your own domain and Let's Encrypt, see
+[Production deployment](install.md#production-deployment).
+
 ## Preparing a box
 
 The steps are the same for both boxes. The Xiaomi stick is 32-bit with 1 GB RAM
@@ -352,3 +387,11 @@ HOME and reports to the server in about 60 s; network ADB survived the restart o
 the test box. Not verified: a cold start after unplugging power (test it
 physically, including HDMI-CEC, before leaving a box unattended), a TV power
 cycle, and the watchdog during a real network outage.
+
+In November 2026 the procedure was also verified on a clean Philips Android TV
+(Android 12): build following this documentation, installation over `adb` with
+the Play Protect dialog, launch, loading of the pairing page, pairing from the
+admin, uploading an image and showing it, and uninstalling. Still not verified:
+the kiosk as the launcher (`set-home-activity` and disabling the system
+launcher), a cold start, the watchdog, updates from the server and Wireless
+debugging.

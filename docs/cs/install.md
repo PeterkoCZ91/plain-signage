@@ -191,6 +191,11 @@ Hostitele je třeba jednou připravit:
    }
    ```
 
+   Na zkoušku v domácí síti bez vlastní domény viz
+   [Zkouška doma bez vlastní domény](kiosk.md#zkouška-doma-bez-vlastní-domény)
+   (veřejný soukromý klíč, jen demo data). Reálný provoz potřebuje vlastní
+   doménu a certifikát například od Let's Encrypt.
+
    Staré panely bez HTTPS potřebují prostý HTTP server na portu 80 se stejným
    `proxy_pass`. Nový `limit_req_zone` `nginx -s reload` nenačte; nginx restartuj.
 

@@ -2,6 +2,8 @@
 
 [Česky](README.cs.md)
 
+[![CI](https://github.com/PeterkoCZ91/plain-signage/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/PeterkoCZ91/plain-signage/actions/workflows/ci.yml?query=branch%3Amain)
+
 Self-hosted digital signage for TVs and panels. A small server you run yourself, with no cloud account and no database, plays photos and videos in a loop on any number of screens. A screen is a cheap Android box or any browser opened on one URL; content is managed in a web admin in Czech or English.
 
 ![Admin: screen with five items](docs/screenshots/admin-desktop.png)
@@ -70,4 +72,4 @@ bash deploy/test-backup-restore.sh             # backup and restore round trip
 
 ## License
 
-Questions and ideas: [Discussions](https://github.com/PeterkoCZ91/plain-signage/discussions). Bugs: [open an issue](https://github.com/PeterkoCZ91/plain-signage/issues/new/choose). MIT, see [LICENSE](LICENSE). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md). Third-party licenses: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Changes: [CHANGELOG.md](CHANGELOG.md).
+Questions and ideas: [Discussions](https://github.com/PeterkoCZ91/plain-signage/discussions). Bugs: [open an issue](https://github.com/PeterkoCZ91/plain-signage/issues/new/choose). MIT, see [LICENSE](LICENSE). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security reports: [SECURITY.md](SECURITY.md). Third-party licenses: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Changes: [CHANGELOG.md](CHANGELOG.md).

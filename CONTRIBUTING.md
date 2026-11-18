@@ -6,6 +6,7 @@ makes sense. Before opening a pull request run the checks listed in the
 
 - `(cd deploy/app && python3 -m pytest -q)` and `node --test deploy/app/tv/test/*.test.mjs`
 - `(cd deploy/app && ruff check .)`
+- `node --check deploy/app/tv/sw.js`
 - `shellcheck -S warning deploy/*.sh deploy/tools/*.sh kiosk-app/build.sh wifi-app/build.sh`
 - `bash deploy/test-backup-restore.sh`
 - the kiosk Java tests when you touch `kiosk-app/` ([docs/en/kiosk.md](docs/en/kiosk.md#build))
@@ -16,3 +17,5 @@ Write new code, identifiers, comments and commit messages in English. Czech is
 used for UI strings, API error texts (`errors.py`), some existing test data and
 `docs/cs`; keep the English and Czech docs in step. Contributions are licensed
 under the MIT License.
+
+Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).

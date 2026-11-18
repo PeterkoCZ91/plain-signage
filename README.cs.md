@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+[![CI](https://github.com/PeterkoCZ91/plain-signage/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/PeterkoCZ91/plain-signage/actions/workflows/ci.yml?query=branch%3Amain)
+
 Digitální signage pro TV a panely, které si provozuješ sám. Malý server bez cloudového účtu a bez databáze přehrává fotky a videa ve smyčce na libovolném počtu obrazovek. Obrazovkou je levný Android box nebo jakýkoli prohlížeč otevřený na jednom URL; obsah se spravuje ve webovém adminu, česky nebo anglicky.
 
 ![Administrace: obrazovka s pěti položkami](docs/screenshots/admin-desktop-cs.png)
@@ -70,4 +72,4 @@ bash deploy/test-backup-restore.sh             # kolečko záloha a obnova
 
 ## Licence
 
-Dotazy a nápady: [Discussions](https://github.com/PeterkoCZ91/plain-signage/discussions). Chyby: [nový issue](https://github.com/PeterkoCZ91/plain-signage/issues/new/choose). MIT, viz [LICENSE](LICENSE). Přispívání: [CONTRIBUTING.md](CONTRIBUTING.md). Hlášení bezpečnostních chyb: [SECURITY.md](SECURITY.md). Licence použitých knihoven: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Změny: [CHANGELOG.md](CHANGELOG.md).
+Dotazy a nápady: [Discussions](https://github.com/PeterkoCZ91/plain-signage/discussions). Chyby: [nový issue](https://github.com/PeterkoCZ91/plain-signage/issues/new/choose). MIT, viz [LICENSE](LICENSE). Přispívání: [CONTRIBUTING.md](CONTRIBUTING.md). Pravidla chování: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Hlášení bezpečnostních chyb: [SECURITY.md](SECURITY.md). Licence použitých knihoven: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). Změny: [CHANGELOG.md](CHANGELOG.md).
